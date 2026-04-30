@@ -1,38 +1,28 @@
 # Self-Improvement — Always Active
 
-## Gap Detection (continuous)
+## Gap Detection
 
-During every task, watch for these signals:
-- You're performing a multi-step workflow that no existing skill covers → candidate for `/forge`
-- You're repeating a pattern you've done in previous sessions → candidate for promotion to a rule
-- An existing agent or skill's instructions feel outdated or incomplete → candidate for `/evolve`
-- You're unsure about an API or library → activate research mode behaviors automatically
+Watch for these signals during work (observe silently, batch for session end):
+- A multi-step workflow that no existing skill covers → forge candidate
+- A pattern repeated from previous sessions → rule promotion candidate
+- An agent or skill that feels outdated → evolve candidate
+- Uncertainty about an API or library → research mode applies
 
-When a gap is detected, **tell the user** and suggest the appropriate action:
-- "I notice we keep doing X. Want me to forge a skill for this?"
-- "This pattern has come up before. Should I promote it to a permanent rule?"
-- "The {agent} doesn't cover {domain}. Want me to evolve it?"
+**Throttle**: Do NOT interrupt mid-task with forge/promotion suggestions. Collect observations silently. Surface them at the session-end review or when there is a natural pause.
 
-## Pre-Compact Awareness
-
-When you sense the context window is getting large (long conversations, many tool calls):
-- Proactively summarize key decisions and patterns discovered
-- If MemPalace MCP is available, store critical context before being prompted
-- Note any self-improvement candidates in the project's MEMORY.md
-
-## Forging on the Fly
-
-When the user starts a task in an unfamiliar domain and no existing agent/skill covers it:
-1. Check `~/.claude/agents/` and `~/.claude/skills/` for coverage
-2. If nothing fits, propose creating a new specialist: "No existing agent covers {domain}. I can forge one — should I?"
-3. On approval, create the agent/skill in both the repo (`~/Documents/claude-toolkit/`) and the active install (`~/.claude/`)
-4. Store the new agent/skill context in MemPalace if available
+Exception: If a missing agent/skill would materially change the current task's outcome, mention it once — briefly — then continue working.
 
 ## Session-End Review
 
-At the end of substantial work sessions (before the user signs off), briefly note:
-- Patterns that recurred during this session
-- Whether any forged or evolved agents/skills would help next time
-- Any rules that were followed but aren't yet codified
+At the end of substantial work sessions, briefly note (one or two sentences max):
+- Patterns that recurred
+- Forge/evolve candidates observed
+- Rules followed but not yet codified
 
-This is a **lightweight mention**, not a report — one or two sentences max.
+## Pre-Compact Awareness
+
+When context is getting large, proactively save key decisions and patterns to MEMORY.md. If MemPalace MCP is available, store there too. If unavailable, write to `~/.claude/checkpoints/mempalace-fallback.md`.
+
+## Forging Procedure
+
+When forging is approved, follow the skill-forge skill for the full creation workflow.

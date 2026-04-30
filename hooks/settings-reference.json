@@ -47,10 +47,11 @@
         "hooks": [
           {
             "type": "command",
-            "command": "node HOME_DIR/.claude/hooks/scripts/pre-compact-save.js"
+            "command": "node HOME_DIR/.claude/hooks/scripts/pre-compact-save.js",
+            "timeout": 10
           }
         ],
-        "description": "Save critical context to project memory + MemPalace before compression",
+        "description": "Checkpoint context to file + instruct MemPalace save before compression",
         "id": "pre:compact-save"
       }
     ],
@@ -60,7 +61,8 @@
         "hooks": [
           {
             "type": "command",
-            "command": "node HOME_DIR/.claude/hooks/scripts/console-log-check.js"
+            "command": "node HOME_DIR/.claude/hooks/scripts/console-log-check.js",
+            "timeout": 5
           }
         ],
         "description": "Warn about console.log statements in recently edited files",

@@ -6,14 +6,21 @@
 //
 // How it works:
 //   - Matcher: "Read|Edit|Write"
-//   - On Read: records the file_path in a session tracker file
+//   - On Read: records the file_path in a session-scoped tracker file
 //   - On Edit/Write: checks if the file_path was previously recorded
 //   - Blocks with a clear message if the file hasn't been read
+//
+// Race condition prevention:
+//   - Tracker is scoped per session via CLAUDE_SESSION_ID or PPID
+//   - Writes use atomic rename to prevent partial-write corruption
 
 const fs = require('fs');
 const path = require('path');
+const os = require('os');
 
-const TRACKER_PATH = '/tmp/claude-read-tracker.json';
+// Session-scoped tracker: isolates parallel agents and separate sessions
+const SESSION_ID = process.env.CLAUDE_SESSION_ID || process.env.CLAUDE_CONVERSATION_ID || String(process.ppid || 'default');
+const TRACKER_PATH = path.join(os.tmpdir(), `claude-read-tracker-${SESSION_ID}.json`);
 
 function loadTracker() {
   try {
@@ -25,7 +32,16 @@ function loadTracker() {
 }
 
 function saveTracker(tracker) {
-  fs.writeFileSync(TRACKER_PATH, JSON.stringify(tracker, null, 2));
+  // Atomic write: write to temp file, then rename
+  const tmpFile = TRACKER_PATH + '.tmp.' + process.pid;
+  try {
+    fs.writeFileSync(tmpFile, JSON.stringify(tracker, null, 2));
+    fs.renameSync(tmpFile, TRACKER_PATH);
+  } catch {
+    // If atomic rename fails, fall back to direct write
+    try { fs.unlinkSync(tmpFile); } catch { /* ignore */ }
+    fs.writeFileSync(TRACKER_PATH, JSON.stringify(tracker, null, 2));
+  }
 }
 
 function normalizePath(filePath) {

@@ -21,12 +21,6 @@
 - Only flag issues you are > 80% confident about
 - Consolidate similar findings (not 5 separate "missing error handling" notes)
 
-## Deploy Checklist
+## Deploy
 
-- [ ] All tests pass
-- [ ] DB migrations tested and reversible
-- [ ] Environment variables set in target environment
-- [ ] No console.log / debugger statements
-- [ ] Bundle size checked for regressions
-- [ ] Rollback plan documented
-- [ ] Monitoring and alerting verified
+Before deploying, follow the deploy-checklist skill for the full pre-deployment verification workflow.

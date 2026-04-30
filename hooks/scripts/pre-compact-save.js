@@ -1,38 +1,81 @@
 #!/usr/bin/env node
 
-// PreCompact hook: instructs Claude to save critical context to both
-// project memory files AND MemPalace before context window compression.
-// This ensures nothing is lost when the context resets.
+// PreCompact hook: deterministically saves a checkpoint of the conversation
+// context to a local file, THEN instructs Claude to enrich it with MemPalace.
+//
+// This follows "hooks over prompts" — the deterministic write always happens,
+// regardless of whether the LLM follows the MemPalace instruction.
 
-const SAVE_PROMPT = `BEFORE COMPACTING — You MUST save critical context now:
+const fs = require('fs');
+const path = require('path');
+const os = require('os');
 
-## Step 1: Write to Project Memory
-Update the project's MEMORY.md (or CLAUDE.md) with:
-- **Current task**: What you're working on and its status
-- **Key decisions**: Architectural or design decisions made this session
-- **Discovered patterns**: Recurring workflows or conventions observed
-- **File paths**: Which files are being actively modified
-- **Next steps**: What should happen after compaction
+// Deterministic checkpoint: extract key signals from the input
+function extractCheckpoint(inputText) {
+  const timestamp = new Date().toISOString();
+  const cwd = process.cwd();
 
-## Step 2: Store in MemPalace (if MCP available)
-Use MemPalace MCP tools to persist deeper context:
-- store_memory: Save session learnings with semantic tags
-- Include: task context, discovered conventions, failure patterns, success patterns
-- Tag with project name and current date for future recall
-- Store any forged agent/skill personality accumulated this session
+  // Extract file paths mentioned in the conversation (heuristic)
+  const filePathPattern = /(?:\/[\w.-]+)+\.\w+/g;
+  const mentionedFiles = [...new Set((inputText.match(filePathPattern) || []).slice(0, 20))];
 
-## Step 3: Record Self-Improvement Candidates
-If you noticed any of these during the session, note them in memory:
-- Patterns that appeared 2+ times (promotion candidates)
-- Gaps where a specialized agent/skill would have helped
-- Rules that were followed but aren't yet codified
-- Existing rules or skills that felt outdated
+  return {
+    timestamp,
+    cwd,
+    mentionedFiles,
+    contextLength: inputText.length,
+    summary: 'Pre-compact checkpoint — context was compressed after this point.',
+  };
+}
 
-This context will be LOST if you don't save it now. Act immediately.`;
+function writeCheckpoint(checkpoint) {
+  // Write to a predictable location that survives compaction
+  const checkpointDir = path.join(os.homedir(), '.claude', 'checkpoints');
+  try {
+    fs.mkdirSync(checkpointDir, { recursive: true });
+  } catch { /* exists */ }
+
+  const checkpointFile = path.join(checkpointDir, 'last-compact.json');
+  const historyFile = path.join(checkpointDir, 'compact-history.jsonl');
+
+  // Write latest checkpoint (overwrite)
+  fs.writeFileSync(checkpointFile, JSON.stringify(checkpoint, null, 2));
+
+  // Append to history (keep last 50 entries)
+  fs.appendFileSync(historyFile, JSON.stringify(checkpoint) + '\n');
+
+  // Trim history if too large (keep last 50 lines)
+  try {
+    const lines = fs.readFileSync(historyFile, 'utf8').trim().split('\n');
+    if (lines.length > 50) {
+      fs.writeFileSync(historyFile, lines.slice(-50).join('\n') + '\n');
+    }
+  } catch { /* ignore trim errors */ }
+}
+
+// The prompt for Claude to do the intelligent part (MemPalace + memory)
+const SAVE_PROMPT = `BEFORE COMPACTING — A checkpoint has been saved to ~/.claude/checkpoints/last-compact.json.
+
+Now do the intelligent part that only you can do:
+
+1. **Update project MEMORY.md** with: current task status, key decisions, discovered patterns, next steps.
+2. **Store in MemPalace** (if MCP available): session learnings, domain conventions, forged agent personality. If MemPalace is unavailable, write to ~/.claude/checkpoints/mempalace-fallback.md instead.
+3. **Self-improvement candidates**: patterns that recurred, gaps detected, rules to codify.
+
+The checkpoint file has the file paths and timestamp. You provide the meaning.`;
 
 let input = '';
 process.stdin.setEncoding('utf8');
 process.stdin.on('data', (chunk) => { input += chunk; });
 process.stdin.on('end', () => {
+  // DETERMINISTIC: always write checkpoint, regardless of LLM behavior
+  try {
+    const checkpoint = extractCheckpoint(input);
+    writeCheckpoint(checkpoint);
+  } catch {
+    // Don't block compaction if checkpoint fails
+  }
+
+  // PROMPT: ask Claude to do the intelligent enrichment
   process.stdout.write(SAVE_PROMPT + '\n\n' + input);
 });

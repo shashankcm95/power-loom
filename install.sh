@@ -6,24 +6,72 @@ set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 CLAUDE_DIR="$HOME/.claude"
+DRY_RUN=false
+BACKUP=false
 
 usage() {
-  echo "Usage: $0 [--all | --agents | --rules | --hooks | --commands | --skills]"
+  echo "Usage: $0 [OPTIONS] [COMPONENTS]"
   echo ""
-  echo "Options:"
+  echo "Components:"
   echo "  --all        Install everything"
   echo "  --agents     Install agent definitions"
   echo "  --rules      Install coding rules/guardrails"
-  echo "  --hooks      Install hook scripts and merge hook config"
+  echo "  --hooks      Install hook scripts"
   echo "  --commands   Install slash commands"
   echo "  --skills     Install skill workflows"
   echo ""
-  echo "Multiple flags can be combined: $0 --agents --rules --hooks"
+  echo "Options:"
+  echo "  --diff       Preview changes without installing (dry run)"
+  echo "  --backup     Back up existing ~/.claude/ before overwriting"
+  echo "  --test       Run hook smoke tests after installation"
+  echo ""
+  echo "Multiple flags can be combined: $0 --backup --all --test"
   echo "With no flags, shows this help."
   exit 0
 }
 
+backup_existing() {
+  local timestamp
+  timestamp=$(date +%Y%m%d-%H%M%S)
+  local backup_dir="$CLAUDE_DIR/backups/backup-$timestamp"
+  echo "Backing up existing installation..."
+  mkdir -p "$backup_dir"
+  for dir in agents rules hooks commands skills; do
+    if [ -d "$CLAUDE_DIR/$dir" ]; then
+      cp -r "$CLAUDE_DIR/$dir" "$backup_dir/$dir"
+    fi
+  done
+  echo "  -> Backup saved to $backup_dir"
+}
+
+diff_component() {
+  local src="$1"
+  local dest="$2"
+  local label="$3"
+
+  if [ -f "$src" ]; then
+    if [ -f "$dest" ]; then
+      local changes
+      changes=$(diff -u "$dest" "$src" 2>/dev/null || true)
+      if [ -n "$changes" ]; then
+        echo "  MODIFIED: $label"
+        echo "$changes" | head -20
+        [ "$(echo "$changes" | wc -l)" -gt 20 ] && echo "  ... (truncated)"
+      fi
+    else
+      echo "  NEW: $label"
+    fi
+  fi
+}
+
 install_agents() {
+  if $DRY_RUN; then
+    echo "[DRY RUN] Agents:"
+    for f in "$SCRIPT_DIR"/agents/*.md; do
+      diff_component "$f" "$CLAUDE_DIR/agents/$(basename "$f")" "agents/$(basename "$f")"
+    done
+    return
+  fi
   echo "Installing agents..."
   mkdir -p "$CLAUDE_DIR/agents"
   cp "$SCRIPT_DIR"/agents/*.md "$CLAUDE_DIR/agents/"
@@ -31,6 +79,14 @@ install_agents() {
 }
 
 install_rules() {
+  if $DRY_RUN; then
+    echo "[DRY RUN] Rules:"
+    find "$SCRIPT_DIR/rules" -name '*.md' | while read -r f; do
+      local rel="${f#"$SCRIPT_DIR"/rules/}"
+      diff_component "$f" "$CLAUDE_DIR/rules/toolkit/$rel" "rules/$rel"
+    done
+    return
+  fi
   echo "Installing rules..."
   mkdir -p "$CLAUDE_DIR/rules/toolkit"
   cp -r "$SCRIPT_DIR"/rules/* "$CLAUDE_DIR/rules/toolkit/"
@@ -38,6 +94,13 @@ install_rules() {
 }
 
 install_hooks() {
+  if $DRY_RUN; then
+    echo "[DRY RUN] Hooks:"
+    for f in "$SCRIPT_DIR"/hooks/scripts/*.js; do
+      diff_component "$f" "$CLAUDE_DIR/hooks/scripts/$(basename "$f")" "hooks/scripts/$(basename "$f")"
+    done
+    return
+  fi
   echo "Installing hooks..."
   mkdir -p "$CLAUDE_DIR/hooks/scripts"
   cp "$SCRIPT_DIR"/hooks/scripts/*.js "$CLAUDE_DIR/hooks/scripts/"
@@ -45,12 +108,18 @@ install_hooks() {
   echo "  -> Hook scripts installed"
   echo ""
   echo "  NOTE: Hook configuration must be manually merged."
-  echo "  Copy the hooks from $SCRIPT_DIR/hooks/settings.json"
-  echo "  into your ~/.claude/settings.json under the 'hooks' key."
-  echo "  Update script paths to use absolute paths to ~/.claude/hooks/scripts/"
+  echo "  See hooks/settings-reference.json for the configuration template."
+  echo "  Replace HOME_DIR with your actual home directory path."
 }
 
 install_commands() {
+  if $DRY_RUN; then
+    echo "[DRY RUN] Commands:"
+    for f in "$SCRIPT_DIR"/commands/*.md; do
+      diff_component "$f" "$CLAUDE_DIR/commands/$(basename "$f")" "commands/$(basename "$f")"
+    done
+    return
+  fi
   echo "Installing commands..."
   mkdir -p "$CLAUDE_DIR/commands"
   cp "$SCRIPT_DIR"/commands/*.md "$CLAUDE_DIR/commands/"
@@ -58,10 +127,83 @@ install_commands() {
 }
 
 install_skills() {
+  if $DRY_RUN; then
+    echo "[DRY RUN] Skills:"
+    find "$SCRIPT_DIR/skills" -name 'SKILL.md' | while read -r f; do
+      local rel="${f#"$SCRIPT_DIR"/}"
+      diff_component "$f" "$CLAUDE_DIR/$rel" "$rel"
+    done
+    return
+  fi
   echo "Installing skills..."
   mkdir -p "$CLAUDE_DIR/skills"
   cp -r "$SCRIPT_DIR"/skills/* "$CLAUDE_DIR/skills/"
   echo "  -> Skills installed to ~/.claude/skills/"
+}
+
+run_smoke_tests() {
+  echo ""
+  echo "Running hook smoke tests..."
+  local passed=0
+  local failed=0
+
+  # Test 1: fact-force-gate blocks unread file
+  local result
+  result=$(echo '{"tool_name":"Edit","tool_input":{"file_path":"/tmp/test-fact-gate-unread.txt"}}' | node "$CLAUDE_DIR/hooks/scripts/fact-force-gate.js" 2>/dev/null)
+  if echo "$result" | grep -q '"decision":"block"'; then
+    echo "  ✓ fact-force-gate: blocks unread existing file"
+    passed=$((passed + 1))
+  else
+    echo "  ✗ fact-force-gate: FAILED to block unread file"
+    failed=$((failed + 1))
+  fi
+
+  # Test 2: fact-force-gate allows new file
+  result=$(echo '{"tool_name":"Write","tool_input":{"file_path":"/tmp/nonexistent-test-file-99999.txt"}}' | node "$CLAUDE_DIR/hooks/scripts/fact-force-gate.js" 2>/dev/null)
+  if echo "$result" | grep -q '"decision":"approve"'; then
+    echo "  ✓ fact-force-gate: allows new file creation"
+    passed=$((passed + 1))
+  else
+    echo "  ✗ fact-force-gate: FAILED to allow new file"
+    failed=$((failed + 1))
+  fi
+
+  # Test 3: config-guard blocks eslintrc
+  result=$(echo '{"tool_name":"Edit","tool_input":{"file_path":"/app/.eslintrc.json"}}' | node "$CLAUDE_DIR/hooks/scripts/config-guard.js" 2>/dev/null)
+  if echo "$result" | grep -q '"decision":"block"'; then
+    echo "  ✓ config-guard: blocks .eslintrc edits"
+    passed=$((passed + 1))
+  else
+    echo "  ✗ config-guard: FAILED to block .eslintrc"
+    failed=$((failed + 1))
+  fi
+
+  # Test 4: config-guard allows normal files
+  result=$(echo '{"tool_name":"Edit","tool_input":{"file_path":"/app/src/index.ts"}}' | node "$CLAUDE_DIR/hooks/scripts/config-guard.js" 2>/dev/null)
+  if echo "$result" | grep -q '"decision":"approve"'; then
+    echo "  ✓ config-guard: allows normal file edits"
+    passed=$((passed + 1))
+  else
+    echo "  ✗ config-guard: FAILED to allow normal file"
+    failed=$((failed + 1))
+  fi
+
+  # Test 5: session-reset creates tracker (use node to resolve tmpdir)
+  local tmpdir
+  tmpdir=$(node -e "process.stdout.write(require('os').tmpdir())")
+  CLAUDE_SESSION_ID="smoke-test" node "$CLAUDE_DIR/hooks/scripts/session-reset.js" 2>/dev/null
+  if [ -f "$tmpdir/claude-read-tracker-smoke-test.json" ]; then
+    echo "  ✓ session-reset: creates tracker file"
+    rm -f "$tmpdir/claude-read-tracker-smoke-test.json"
+    passed=$((passed + 1))
+  else
+    echo "  ✗ session-reset: FAILED to create tracker"
+    failed=$((failed + 1))
+  fi
+
+  echo ""
+  echo "  Results: $passed passed, $failed failed"
+  [ "$failed" -gt 0 ] && echo "  ⚠ Some tests failed — check hook scripts and paths"
 }
 
 if [ $# -eq 0 ]; then
@@ -73,6 +215,7 @@ INSTALL_RULES=false
 INSTALL_HOOKS=false
 INSTALL_COMMANDS=false
 INSTALL_SKILLS=false
+RUN_TESTS=false
 
 for arg in "$@"; do
   case $arg in
@@ -88,6 +231,9 @@ for arg in "$@"; do
     --hooks)    INSTALL_HOOKS=true ;;
     --commands) INSTALL_COMMANDS=true ;;
     --skills)   INSTALL_SKILLS=true ;;
+    --diff)     DRY_RUN=true ;;
+    --backup)   BACKUP=true ;;
+    --test)     RUN_TESTS=true ;;
     --help|-h)  usage ;;
     *)
       echo "Unknown option: $arg"
@@ -100,11 +246,29 @@ echo "claude-toolkit installer"
 echo "========================"
 echo ""
 
+if $DRY_RUN; then
+  echo "DRY RUN MODE — showing what would change"
+  echo ""
+fi
+
+if $BACKUP && ! $DRY_RUN; then
+  backup_existing
+  echo ""
+fi
+
 $INSTALL_AGENTS  && install_agents
 $INSTALL_RULES   && install_rules
 $INSTALL_HOOKS   && install_hooks
 $INSTALL_COMMANDS && install_commands
 $INSTALL_SKILLS  && install_skills
 
+if $RUN_TESTS && ! $DRY_RUN; then
+  run_smoke_tests
+fi
+
 echo ""
-echo "Done! Restart Claude Code to pick up the changes."
+if $DRY_RUN; then
+  echo "Dry run complete. Run without --diff to install."
+else
+  echo "Done! Restart Claude Code to pick up the changes."
+fi

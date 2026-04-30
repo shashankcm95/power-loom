@@ -79,10 +79,11 @@ Approve, modify, or say "just do it" to skip enrichment.
 - **Skip** ("just do it", "skip"): Execute raw prompt as-is. Don't store pattern.
 - **Always skip for this type**: Store a "skip" preference for this task category.
 
-## Step 5: Store in MemPalace
+## Step 5: Store Pattern
 
-On approval, store the pattern for future reuse:
+On approval, store the pattern for future reuse.
 
+**If MemPalace MCP is available**, store in the `prompt-patterns` room:
 ```
 Room: prompt-patterns
 Memory:
@@ -95,6 +96,11 @@ Memory:
   approval_count: 1
   last_used: timestamp
 ```
+
+**If MemPalace is NOT available**, fall back to local storage:
+- Write to `~/.claude/prompt-patterns.json`
+- Same structure as above, stored as a JSON array of pattern objects
+- On subsequent sessions, read this file to check for recognized patterns
 
 On subsequent matches (fuzzy match against stored raws):
 - approval_count < 3: Show enriched prompt, ask for confirmation
