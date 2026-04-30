@@ -263,6 +263,10 @@ $INSTALL_COMMANDS && install_commands
 $INSTALL_SKILLS  && install_skills
 
 if $RUN_TESTS && ! $DRY_RUN; then
+  if ! $INSTALL_HOOKS; then
+    echo "  NOTE: --test without --hooks tests already-installed hooks, not source."
+    echo "  Pass --hooks --test to install first, then test."
+  fi
   run_smoke_tests
 fi
 

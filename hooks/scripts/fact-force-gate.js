@@ -46,7 +46,9 @@ function saveTracker(tracker) {
 
 function normalizePath(filePath) {
   if (!filePath) return '';
-  return path.resolve(filePath);
+  const resolved = path.resolve(filePath);
+  // Resolve symlinks for consistent tracking
+  try { return fs.realpathSync(resolved); } catch { return resolved; }
 }
 
 let input = '';

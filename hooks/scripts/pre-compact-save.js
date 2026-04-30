@@ -17,7 +17,7 @@ function extractCheckpoint(inputText) {
 
   // Extract file paths mentioned in the conversation (heuristic)
   const filePathPattern = /(?:\/[\w.-]+)+\.\w+/g;
-  const mentionedFiles = [...new Set((inputText.match(filePathPattern) || []).slice(0, 20))];
+  const mentionedFiles = [...new Set(inputText.match(filePathPattern) || [])].slice(0, 20);
 
   return {
     timestamp,
@@ -76,6 +76,6 @@ process.stdin.on('end', () => {
     // Don't block compaction if checkpoint fails
   }
 
-  // PROMPT: ask Claude to do the intelligent enrichment
-  process.stdout.write(SAVE_PROMPT + '\n\n' + input);
+  // PROMPT: append instruction after input so it doesn't pollute the compact summary
+  process.stdout.write(input + '\n\n---\n' + SAVE_PROMPT);
 });

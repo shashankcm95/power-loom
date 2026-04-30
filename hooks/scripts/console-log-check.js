@@ -23,12 +23,18 @@ process.stdin.on('end', () => {
       return;
     }
 
-    const changedFiles = execSync('git diff --name-only HEAD 2>/dev/null || true', {
+    // Include both committed changes and new untracked files
+    const committed = execSync('git diff --name-only HEAD 2>/dev/null || true', {
       encoding: 'utf8',
       timeout: 5000,
-    })
-      .trim()
-      .split('\n')
+    }).trim().split('\n');
+
+    const untracked = execSync('git ls-files --others --exclude-standard 2>/dev/null || true', {
+      encoding: 'utf8',
+      timeout: 5000,
+    }).trim().split('\n');
+
+    const changedFiles = [...committed, ...untracked]
       .filter(Boolean)
       .map((f) => path.resolve(repoRoot, f))
       .filter((f) => /\.(ts|tsx|js|jsx)$/.test(f) && fs.existsSync(f));
@@ -39,8 +45,10 @@ process.stdin.on('end', () => {
       const content = fs.readFileSync(file, 'utf8');
       const lines = content.split('\n');
       for (let i = 0; i < lines.length; i++) {
-        if (/console\.log\(/.test(lines[i]) && !/\/\/\s*eslint-disable/.test(lines[i])) {
-          // Use relative path for cleaner display
+        if (/console\.log\(/.test(lines[i]) &&
+            !/\/\/\s*eslint-disable/.test(lines[i]) &&
+            !/\/\*.*eslint-disable.*\*\//.test(lines[i]) &&
+            !(i > 0 && /eslint-disable-next-line/.test(lines[i - 1]))) {
           const relPath = path.relative(repoRoot, file);
           filesWithConsoleLog.push(`  ${relPath}:${i + 1}`);
           break;

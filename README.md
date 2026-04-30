@@ -30,13 +30,16 @@ Built from original work, informed by architectural patterns from [everything-cl
 
 ```bash
 # Clone the repo
-git clone <your-repo-url> ~/Documents/claude-toolkit
+git clone https://github.com/shashankcm95/claude-skills-consolidated.git ~/Documents/claude-toolkit
 
-# Install everything
-./install.sh --all
+# Install everything (with backup and smoke tests)
+./install.sh --backup --all --test
 
 # Or install selectively
 ./install.sh --agents --rules --hooks
+
+# Preview changes before installing
+./install.sh --diff --all
 ```
 
 ### What goes where

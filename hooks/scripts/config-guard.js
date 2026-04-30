@@ -4,15 +4,14 @@
 // Forces the agent to fix code instead of weakening configurations.
 
 const PROTECTED_PATTERNS = [
-  /\.eslintrc/i,
-  /eslint\.config/i,
-  /\.prettierrc/i,
-  /prettier\.config/i,
-  /biome\.json/i,
-  /biome\.jsonc/i,
-  /\.stylelintrc/i,
-  /tsconfig.*\.json$/i,
-  /\.editorconfig/i,
+  /(?:^|\/)\.eslintrc/i,
+  /(?:^|\/)eslint\.config/i,
+  /(?:^|\/)\.prettierrc/i,
+  /(?:^|\/)prettier\.config/i,
+  /(?:^|\/)biome\.jsonc?$/i,
+  /(?:^|\/)\.stylelintrc/i,
+  /(?:^|\/)tsconfig[^/]*\.json$/i,
+  /(?:^|\/)\.editorconfig$/i,
 ];
 
 let input = '';
