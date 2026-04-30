@@ -1,7 +1,8 @@
 #!/usr/bin/env node
 
-// Stop hook (async): sends a macOS notification when Claude finishes a response.
+// Stop hook (async): sends a desktop notification when Claude finishes a response.
 // Non-blocking — failures are silently ignored.
+// Cross-platform: macOS (osascript), Linux (notify-send), Windows/WSL skipped.
 
 const { execSync } = require('child_process');
 
@@ -14,8 +15,15 @@ process.stdin.on('end', () => {
   try {
     const title = 'Claude Code';
     const message = 'Task complete — check your terminal.';
-    const script = `display notification "${message}" with title "${title}" sound name "Glass"`;
-    execSync(`osascript -e '${script}'`, { timeout: 3000, stdio: 'ignore' });
+    const platform = process.platform;
+
+    if (platform === 'darwin') {
+      const script = `display notification "${message}" with title "${title}" sound name "Glass"`;
+      execSync(`osascript -e '${script}'`, { timeout: 3000, stdio: 'ignore' });
+    } else if (platform === 'linux') {
+      execSync(`notify-send "${title}" "${message}" -u low`, { timeout: 3000, stdio: 'ignore' });
+    }
+    // Windows / WSL / other: silently skip
   } catch {
     // Non-critical — never block on notification failures
   }

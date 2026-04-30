@@ -201,6 +201,19 @@ run_smoke_tests() {
     failed=$((failed + 1))
   fi
 
+  # Test 6: notify-waiting passes input through and writes cooldown
+  rm -f "$tmpdir/claude-notify-waiting-cooldown.json"
+  local notify_result
+  notify_result=$(echo '{"notification_type":"permission_prompt","notification_data":{"tool_name":"TestTool"}}' | node "$CLAUDE_DIR/hooks/scripts/notify-waiting.js" 2>/dev/null)
+  if [ -n "$notify_result" ] && [ -f "$tmpdir/claude-notify-waiting-cooldown.json" ]; then
+    echo "  ✓ notify-waiting: passes input through and records cooldown"
+    rm -f "$tmpdir/claude-notify-waiting-cooldown.json"
+    passed=$((passed + 1))
+  else
+    echo "  ✗ notify-waiting: FAILED (no output or no cooldown file)"
+    failed=$((failed + 1))
+  fi
+
   echo ""
   echo "  Results: $passed passed, $failed failed"
   [ "$failed" -gt 0 ] && echo "  ⚠ Some tests failed — check hook scripts and paths"

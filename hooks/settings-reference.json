@@ -41,6 +41,21 @@
         "id": "pre:config-guard"
       }
     ],
+    "Notification": [
+      {
+        "matcher": "permission_prompt|idle_prompt",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node HOME_DIR/.claude/hooks/scripts/notify-waiting.js",
+            "async": true,
+            "timeout": 10
+          }
+        ],
+        "description": "Desktop notification when Claude is waiting (permission or idle)",
+        "id": "notify:waiting"
+      }
+    ],
     "PreCompact": [
       {
         "matcher": "*",
