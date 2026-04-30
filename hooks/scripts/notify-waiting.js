@@ -3,11 +3,15 @@
 // Notification hook (async): sends a desktop notification when Claude needs
 // the user — either waiting for permission or idle waiting for input.
 // Non-blocking, with a 20-second cooldown to prevent notification spam.
+//
+// Skips notification if Claude Code's terminal is already the focused app —
+// no point bugging you when you're already watching.
 
 const { execSync } = require('child_process');
 const fs = require('fs');
 const path = require('path');
 const os = require('os');
+const { isClaudeFocused } = require('./_focus.js');
 
 const COOLDOWN_MS = 20 * 1000;
 const COOLDOWN_FILE = path.join(os.tmpdir(), 'claude-notify-waiting-cooldown.json');
@@ -89,6 +93,11 @@ process.stdin.on('end', () => {
   process.stdout.write(input);
 
   try {
+    // Skip notification if user is actively watching Claude Code
+    if (isClaudeFocused()) {
+      return;
+    }
+
     const data = JSON.parse(input);
     const notificationType = data.notification_type || data.type || '';
     const notificationData = data.notification_data || data.data || {};

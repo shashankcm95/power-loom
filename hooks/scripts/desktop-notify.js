@@ -3,8 +3,11 @@
 // Stop hook (async): sends a desktop notification when Claude finishes a response.
 // Non-blocking — failures are silently ignored.
 // Cross-platform: macOS (osascript), Linux (notify-send), Windows/WSL skipped.
+//
+// Skips notification if Claude Code's terminal is already the focused app.
 
 const { execSync } = require('child_process');
+const { isClaudeFocused } = require('./_focus.js');
 
 let input = '';
 process.stdin.setEncoding('utf8');
@@ -13,6 +16,11 @@ process.stdin.on('end', () => {
   process.stdout.write(input);
 
   try {
+    // Skip notification if user is actively watching Claude Code
+    if (isClaudeFocused()) {
+      return;
+    }
+
     const title = 'Claude Code';
     const message = 'Task complete — check your terminal.';
     const platform = process.platform;
