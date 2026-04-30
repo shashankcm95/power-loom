@@ -9,7 +9,7 @@ Built from original work, informed by architectural patterns from [everything-cl
 | Component | Count | Purpose |
 |-----------|-------|---------|
 | **Agents** | 5 | Specialized subagents: planner, code-reviewer, security-auditor, architect, optimizer |
-| **Rules** | 5 | Always-on guardrails: coding fundamentals, security, workflow + optional language packs (TypeScript, React/Next.js) |
+| **Rules** | 7 | Always-on guardrails: coding fundamentals, security, workflow, research mode, self-improvement + optional language packs (TypeScript, React/Next.js) |
 | **Hooks** | 6 | Deterministic automations: fact-forcing gate, config protection, console.log detection, pre-compact MemPalace save, session reset, desktop notifications |
 | **Commands** | 7 | Slash entry points: `/review`, `/plan`, `/security-audit`, `/self-improve`, `/forge`, `/evolve`, `/prune` |
 | **Skills** | 6 | Workflow guides: full-stack dev, deploy checklist, agent swarm, research mode, self-improvement loop, skill forge |
@@ -88,13 +88,15 @@ claude-toolkit/
 │   └── optimizer.md         # Harness configuration tuning
 ├── rules/
 │   ├── core/
-│   │   ├── fundamentals.md  # KISS, DRY, YAGNI, immutability
-│   │   ├── security.md      # Pre-commit security checklist
-│   │   └── workflow.md      # Git, testing, deploy standards
+│   │   ├── fundamentals.md      # KISS, DRY, YAGNI, immutability
+│   │   ├── security.md          # Pre-commit security checklist
+│   │   ├── workflow.md          # Git, testing, deploy standards
+│   │   ├── research-mode.md     # Always-on anti-hallucination (auto)
+│   │   └── self-improvement.md  # Always-on gap detection + forging (auto)
 │   ├── typescript/
-│   │   └── style.md         # Type discipline, Zod, no console.log
+│   │   └── style.md             # Type discipline, Zod, no console.log
 │   └── web/
-│       └── react-nextjs.md  # Server/client boundaries, hooks, keys
+│       └── react-nextjs.md      # Server/client boundaries, hooks, keys
 ├── hooks/
 │   ├── scripts/
 │   │   ├── fact-force-gate.js   # Must Read before Edit/Write (anti-hallucination)
@@ -125,13 +127,37 @@ claude-toolkit/
 └── README.md
 ```
 
+## How Components Are Invoked
+
+Not everything requires manual triggering. Here's what's automatic vs on-demand:
+
+| Component | Trigger | User action needed? |
+|-----------|---------|-------------------|
+| **Rules** | Injected into every session silently | None — fully automatic |
+| **Hooks** | Fire on deterministic events (file edit, session start, context compact, task complete) | None — fully automatic |
+| **Agents** | Claude delegates to them when it judges a specialist is needed | None — Claude decides |
+| **Skills** | Claude matches them to the current task from its available list | None — Claude picks them up |
+| **Commands** | User types `/command-name` in chat | Yes — manual shortcut |
+
+**Bottom line**: Rules and hooks are always active. Agents and skills are semi-automatic (Claude uses them when relevant). Commands exist as explicit shortcuts for power users but the same behaviors are covered by the always-on rules.
+
 ## Extending
 
 - **Add a new agent**: Create a `.md` file in `agents/` with YAML frontmatter (name, description, tools, model, color) and markdown instructions.
-- **Add a rule**: Create a `.md` file in the appropriate `rules/` subdirectory. Add YAML `paths` frontmatter for language-specific rules.
-- **Add a hook**: Create a `.js` script in `hooks/scripts/`, then add the configuration entry to `hooks/settings.json`.
-- **Add a skill**: Create a directory in `skills/` with a `SKILL.md` file describing the workflow.
-- **Add a command**: Create a `.md` file in `commands/` with the slash command name and delegation instructions.
+- **Add a rule**: Create a `.md` file in the appropriate `rules/` subdirectory. Rules are always-on — best for behaviors that should never be forgotten.
+- **Add a hook**: Create a `.js` script in `hooks/scripts/`, then add the configuration entry to `hooks/settings-reference.json`. Hooks are deterministic — best for hard enforcement.
+- **Add a skill**: Create a directory in `skills/` with a `SKILL.md` file describing the workflow. Skills are matched by Claude when relevant.
+- **Add a command**: Create a `.md` file in `commands/` with the slash command name. Commands are manual triggers — use for on-demand workflows.
+
+### When to use what
+
+| I want... | Use a... |
+|-----------|----------|
+| A behavior that's **always active** in every session | **Rule** |
+| A behavior that **deterministically blocks or modifies** tool calls | **Hook** |
+| A **specialist** Claude can delegate complex subtasks to | **Agent** |
+| A **multi-step workflow** Claude can follow when the situation fits | **Skill** |
+| An **explicit shortcut** a user can type to trigger a workflow | **Command** |
 
 ## License
 
