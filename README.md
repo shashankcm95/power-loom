@@ -8,26 +8,55 @@ A curated, opinionated enhancement layer for Claude Code. Six hooks, eight rules
 
 ## What's Inside
 
-| Layer | Count | Invocation |
-|-------|-------|------------|
-| **Hooks** (deterministic scripts) | 6 | Automatic on Claude Code events |
-| **Rules** (always-on guidance) | 8 | Injected into every session |
-| **Agents** (scoped specialists) | 5 | Claude delegates when needed |
-| **Skills** (workflow guides) | 7 | Claude matches to tasks |
-| **Commands** (manual shortcuts) | 7 | User types `/command-name` |
+The toolkit has two distinct layers: **enforced** (hooks fire deterministically; behavior is guaranteed) and **best-effort guidance** (rules/skills/agents rely on Claude's instruction-following; Claude may skip them under context pressure). Be honest with yourself about which is which when you read claims below.
+
+### 🔒 Enforced Layer (deterministic scripts)
+
+These have hard guarantees — pure logic, no LLM interpretation.
+
+| Hook | Event | Guarantees |
+|------|-------|------------|
+| `fact-force-gate.js` | PreToolUse | Blocks Edit/Write on files not Read in this session |
+| `prompt-enrich-trigger.js` | UserPromptSubmit | Injects forcing instruction for vague prompts |
+| `config-guard.js` | PreToolUse | Blocks edits to linter/formatter configs |
+| `pre-compact-save.js` | PreCompact | Writes checkpoint file before context compression |
+| `console-log-check.js` | Stop | Warns about console.log in changed files |
+| `session-reset.js` | SessionStart | Resets fact-gate tracker, cleans stale state |
+
+### 📜 Best-Effort Guidance Layer (instruction-following)
+
+These shape Claude's reasoning but **can be skipped** by the LLM under pressure. The chaos test (run `chaos-20260501-172842`) found 0% compliance on the prompt-enrichment rule across 8 vague prompts in a real conversation. Treat these as ideals, not guarantees.
+
+| Layer | Count | Invocation | Compliance |
+|-------|-------|------------|------------|
+| **Rules** (always-on text) | 8 | Injected into every session | LLM may skip |
+| **Skills** (workflow guides) | 7 | Claude matches to tasks | LLM may skip |
+| **Agents** (scoped specialists) | 5 | Claude delegates when needed | LLM may skip |
+| **Commands** (manual shortcuts) | 7 | User types `/command-name` | User-driven |
+
+**The honest takeaway**: the value of the toolkit is concentrated in the 6 hooks. Rules/skills/agents add useful context but rely on instruction-following. If a behavior must always happen, build a hook for it.
 
 ---
 
 ## Design Philosophy
 
-1. **Hooks over prompts** — Critical behaviors run as deterministic scripts, not LLM instructions that can be forgotten under context pressure.
-2. **Read before write** — A PreToolUse hook blocks Edit/Write until the target file has been Read in the current session, eliminating hallucinated edits.
-3. **Vagueness has a deterministic gate** — A UserPromptSubmit hook detects vague prompts before Claude processes them and forces 4-part enrichment that's impossible to skip.
-4. **Memory at boundaries** — A PreCompact hook deterministically writes a checkpoint file, then prompts Claude to enrich it with MemPalace storage before context compression.
-5. **Least privilege** — Each agent declares its tools and model tier explicitly. Opus for reasoning-heavy work (planner, architect), Sonnet for mechanical work (reviewer, optimizer).
-6. **Self-improvement loop** — Patterns flow from session memory → MemPalace → permanent rules as they prove themselves across multiple sessions.
-7. **Graceful degradation** — Every MemPalace dependency has a local-file fallback (`~/.claude/prompt-patterns.json`, `~/.claude/checkpoints/`).
-8. **Defer to native** — When Claude Code/Desktop has built-in functionality (e.g., dock-bounce notifications when the app needs attention), use that instead of reimplementing it.
+1. **Hooks over prompts** — Critical behaviors run as deterministic scripts, not LLM instructions that can be forgotten under context pressure. **Where the toolkit's real value lives.**
+2. **Be honest about enforcement** — Distinguish what the toolkit *guarantees* (hooks) from what it *encourages* (rules/skills/agents). Don't conflate the two.
+3. **Read before write** — A PreToolUse hook blocks Edit/Write until the target file has been Read this session, eliminating hallucinated edits.
+4. **Vagueness has a deterministic gate** — A UserPromptSubmit hook detects vague prompts and injects forcing instructions before Claude processes them.
+5. **Memory at boundaries** — A PreCompact hook deterministically writes a checkpoint file before context compression.
+6. **Least privilege** — Each agent declares its tools and model tier explicitly.
+7. **Graceful degradation** — Every MemPalace dependency has a local-file fallback. The toolkit works fully without MemPalace installed.
+8. **Defer to native** — When Claude Code/Desktop has built-in functionality (e.g., dock-bounce notifications), use that instead of reimplementing it.
+
+### What this toolkit is NOT
+
+To prevent disappointment, here's what the toolkit doesn't do:
+
+- ❌ **Does not guarantee Claude follows rules.** Rules are markdown text injected into every session. Claude may skip them under context pressure (verified empirically — see `swarm/run-state/`).
+- ❌ **Does not give agents persistent personality across sessions.** Each agent invocation is a fresh subagent with its `.md` system prompt.
+- ❌ **Does not automatically promote patterns from memory to rules.** That's a manual workflow via `/self-improve` (the user must invoke it).
+- ❌ **Does not enforce MemPalace usage.** When MemPalace is configured, the toolkit suggests storing things there; whether Claude does is up to Claude.
 
 ---
 
