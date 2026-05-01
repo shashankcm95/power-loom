@@ -103,7 +103,15 @@ install_hooks() {
   fi
   echo "Installing hooks..."
   mkdir -p "$CLAUDE_DIR/hooks/scripts"
-  cp "$SCRIPT_DIR"/hooks/scripts/*.js "$CLAUDE_DIR/hooks/scripts/"
+  # Phase-G10: nullglob prevents silent abort under set -e if dir is empty
+  shopt -s nullglob
+  hook_files=("$SCRIPT_DIR"/hooks/scripts/*.js)
+  shopt -u nullglob
+  if [ ${#hook_files[@]} -eq 0 ]; then
+    echo "  WARNING: no hook scripts found in $SCRIPT_DIR/hooks/scripts/"
+    return
+  fi
+  cp "${hook_files[@]}" "$CLAUDE_DIR/hooks/scripts/"
   chmod +x "$CLAUDE_DIR"/hooks/scripts/*.js
   # Phase D: also copy config-guard-patterns.json (data file used by config-guard.js)
   if [ -f "$SCRIPT_DIR/hooks/config-guard-patterns.json" ]; then

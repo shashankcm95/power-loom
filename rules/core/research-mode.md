@@ -1,6 +1,6 @@
-# Research Mode — Always Active
+# Research Mode — Always Active (best-effort)
 
-## Constraints (enforced at all times)
+## Constraints (instruction-following only — see README §"What this toolkit is NOT")
 
 - If you cannot find a credible source for a factual claim, say "I don't have a verified source for this"
 - Never speculate and present it as fact

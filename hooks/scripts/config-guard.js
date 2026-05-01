@@ -38,7 +38,17 @@ function loadPatterns() {
       const raw = fs.readFileSync(candidate, 'utf8');
       const parsed = JSON.parse(raw);
       if (Array.isArray(parsed.patterns)) {
-        const compiled = parsed.patterns.map((p) => new RegExp(`(?:^|\\/)(?:${p})`, 'i'));
+        // Phase-G10: compile each pattern in its own try/catch. Bad
+        // patterns (e.g., ReDoS-prone regex) get logged and dropped
+        // instead of silently falling through to FALLBACK_PATTERNS.
+        const compiled = parsed.patterns.flatMap((p) => {
+          try {
+            return [new RegExp(`(?:^|\\/)(?:${p})`, 'i')];
+          } catch (e) {
+            logger('bad_pattern', { pattern: p, error: e.message });
+            return [];
+          }
+        });
         logger('patterns_loaded', { source: candidate, count: compiled.length });
         return compiled;
       }

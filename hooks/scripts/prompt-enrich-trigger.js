@@ -19,46 +19,54 @@ const { log: makeLogger } = require('./_log.js');
 const log = makeLogger('prompt-enrich-trigger');
 
 // Vague action verbs followed by generic referents.
-// Phase-C additions: ship, tweak, rework, redo, deal with, address, look into,
-// smooth out, polish, tidy, the thing.
+// Phase-G7: extended referent group `REF` to include plural quantifiers
+// (those, these, all, any, every, everything, things, stuff). Centralizes
+// the pattern so all verbs benefit from the same set.
+const REF = '(?:the|this|that|it|some|a|those|these|all|any|every|everything|things|stuff)';
+
 const VAGUE_KEYWORDS = [
-  /\bfix\s+(?:the|this|that|it|some)\b/i,
+  new RegExp(`\\bfix\\s+${REF}\\b`, 'i'),                // "fix all the bugs"
+  new RegExp(`\\bfix\\s+all\\s+(?:the\\s+)?\\w+s?\\b`, 'i'),  // "fix all the bugs"
   /\bmake\s+(?:it|this|that)\s+(?:better|faster|cleaner|nicer|work)/i,
-  /\bimprove\s+(?:the|this|that|it)\b/i,
-  /\boptimi[sz]e\s+(?:the|this|that|it)\b/i,
-  /\bupdate\s+(?:the|this|that|it)\b/i,
+  new RegExp(`\\bimprove\\s+${REF}\\b`, 'i'),
+  new RegExp(`\\boptimi[sz]e\\s+${REF}\\b`, 'i'),
+  new RegExp(`\\bupdate\\s+${REF}\\b`, 'i'),
   /\bclean\s+(?:up|this|that|it)\b/i,
   /\brefactor\s+(?:the|this|that|it)(?!\s+\S+\.\w+)/i,
   /\bdo\s+(?:something|the\s+thing|stuff)\b/i,
-  /\bhandle\s+(?:the|this|that|it)\b/i,
-  /\bsort\s+(?:the|this|that|it)\s+out\b/i,
-  /\bcheck\s+(?:the|this|that|it)\b/i,
-  /\breview\s+(?:the|this|that|it)\b/i,
-  // Phase-C additions (from chaos-test confused-user findings)
-  /\bship\s+(?:the|this|that|it|a)\b/i,
-  /\btweak\s+(?:the|this|that|it|some|a\s+few)\b/i,
-  /\brework\s+(?:the|this|that|it)\b/i,
-  /\bredo\s+(?:the|this|that|it)\b/i,
-  /\bdeal\s+with\s+(?:the|this|that|it)\b/i,
-  /\baddress\s+(?:the|this|that|it)\b/i,
-  /\blook\s+into\s+(?:the|this|that|it)\b/i,
+  new RegExp(`\\bhandle\\s+${REF}\\b`, 'i'),
+  /\bsort\s+(?:the|this|that|it|things?)\s+out\b/i,
+  new RegExp(`\\bcheck\\s+${REF}\\b`, 'i'),
+  new RegExp(`\\breview\\s+${REF}\\b`, 'i'),
+  new RegExp(`\\bship\\s+${REF}\\b`, 'i'),
+  new RegExp(`\\btweak\\s+${REF}\\b`, 'i'),
+  new RegExp(`\\brework\\s+${REF}\\b`, 'i'),
+  new RegExp(`\\bredo\\s+${REF}\\b`, 'i'),
+  new RegExp(`\\bdeal\\s+with\\s+${REF}\\b`, 'i'),
+  new RegExp(`\\baddress\\s+${REF}\\b`, 'i'),
+  new RegExp(`\\blook\\s+into\\s+${REF}\\b`, 'i'),
   /\bsmooth\s+(?:this|that|it|things?)\s+out\b/i,
-  /\bpolish\s+(?:the|this|that|it)\b/i,
-  /\btidy\s+(?:up|this|that|it)\b/i,
-  /\bthe\s+thing\b/i,                 // "help me with the thing"
-  /\bsome\s+(?:things|stuff|changes)\b/i,  // "tweak some things"
-  /\btak(?:e|ing|en)\s+a\s+(?:quick\s+)?look\b/i,  // "take a look", "would you mind taking a look"
+  new RegExp(`\\bpolish\\s+${REF}\\b`, 'i'),
+  /\btidy\s+(?:up|this|that|it|things?)\b/i,
+  /\bthe\s+thing\b/i,
+  /\bsome\s+(?:things|stuff|changes)\b/i,
+  /\btak(?:e|ing|en)\s+a\s+(?:quick\s+)?look\b/i,
   /\bhav(?:e|ing)\s+a\s+(?:quick\s+)?look\b/i,
 ];
 
 // Verb-less observation patterns ("X broken on main", "users can't log in")
 // — these are bug reports without an action ask. They satisfy length checks
 // but are still vague because they don't say what to do.
+// Phase-G7 additions: symptom reports without prepositions
+// ("the page is white", "tests are red", "memory usage spiking").
 const OBSERVATION_PATTERNS = [
   /\b(broken|failing|down|red|hanging|stuck|slow|crashing)\s+(on|in|at)\s+\w+/i,
   /\bcan'?t\s+(log\s+in|sign\s+in|connect|access|reach|see|find)\b/i,
-  /\bis\s+broken\b/i,
-  /\bhas\s+a\s+(bug|deadlock|race|leak|issue)\b/i,
+  /\bis\s+(broken|failing|down|red|stuck|hanging|crashing|spiking|wrong|off|weird)\b/i,
+  /\bare\s+(broken|failing|down|red|stuck|hanging|crashing|spiking|wrong|off|weird)\b/i,
+  /\bhas\s+a\s+(bug|deadlock|race|leak|issue|problem)\b/i,
+  /\b(memory|cpu|disk|network|latency)\s+(usage|use)\s+(spiking|climbing|growing|leaking)\b/i,
+  /\bsomething\s+(is\s+)?(wrong|off|broken|weird)\b/i,
 ];
 
 const SKIP_PATTERNS = [
@@ -115,24 +123,43 @@ function stripPolitenessPadding(prompt) {
 }
 
 function hasFilePath(prompt) {
-  return /\/[\w.-]+/.test(prompt) ||
-         /\b\w+\.(ts|tsx|js|jsx|py|rs|go|rb|md|json|yaml|yml|toml|sh|sql|css|scss|html|vue|svelte|tf|hcl|proto)\b/i.test(prompt) ||
-         /\b(src|app|lib|components?|pages?|api|tests?|hooks?|utils?|services?|controllers?|models?)\/\w+/i.test(prompt);
+  // Phase-G: strip URLs FIRST before checking for paths. Otherwise
+  // "https://example.com" matches hasFilePath via /example.com and
+  // bypasses the vagueness gate.
+  const noUrls = prompt.replace(/https?:\/\/[^\s]+/gi, '');
+  return /(?:\/[\w.-]+){2,}/.test(noUrls) ||
+         /\/[\w.-]+\.\w{1,10}\b/.test(noUrls) ||
+         /\b\w+\.(ts|tsx|js|jsx|py|rs|go|rb|md|json|yaml|yml|toml|sh|sql|css|scss|html|vue|svelte|tf|hcl|proto)\b/i.test(noUrls) ||
+         /\b(src|app|lib|components?|pages?|api|tests?|hooks?|utils?|services?|controllers?|models?)\/\w+/i.test(noUrls);
 }
 
+// Phase-G8: hasSpecificEntity tightened. The previous version short-
+// circuited the gate on URLs alone, camelCase tokens like "fixIt", or
+// fenced code blocks — letting "fix it" + URL escape enrichment.
+//
+// New criteria require entity to provide REAL specificity (a recognized
+// identifier with multi-word camelCase OR a substantive backtick code
+// snippet OR a quoted string of meaningful length). URLs and lone-token
+// patterns no longer count.
 function hasSpecificEntity(prompt) {
-  // Phase-C: tightened — pure all-caps acronyms like JIRA-7890 no longer count.
-  // Real specificity = camelCase, PascalCase, URLs, fn calls, backticks,
-  // quoted strings, OR alphanumeric-with-lowercase identifiers.
-  return /\b[A-Z][a-z]+[A-Z]\w+/.test(prompt) ||           // PascalCase
-         /\b[a-z]+[A-Z]\w+/.test(prompt) ||                // camelCase
-         /https?:\/\//.test(prompt) ||
-         /\b\w+\(\)/.test(prompt) ||                       // function calls
-         /`[^`]+`/.test(prompt) ||                         // backticks
-         /"[^"]{3,}"/.test(prompt) ||                      // quoted strings
-         /'[^']{3,}'/.test(prompt);
-  // NOTE: removed `[A-Z]{4,}` (all-caps acronyms). Tickets like JIRA-7890
-  // alone don't make a prompt actionable.
+  // Strip URLs first — they're not specificity (per Phase-G hacker finding).
+  const text = prompt.replace(/https?:\/\/[^\s]+/gi, '');
+
+  // PascalCase ≥8 chars total (catches "MyController", "UserService" but
+  // not short "MyAa" or "fixIt"). Length check is programmatic since
+  // regex can't naturally express min-total-length.
+  const pascalMatches = text.match(/\b[A-Z][a-z]+[A-Z]\w*/g) || [];
+  if (pascalMatches.some((m) => m.length >= 8)) return true;
+  // camelCase ≥8 chars total ("doSomething", "isReady" wouldn't count)
+  const camelMatches = text.match(/\b[a-z]+[A-Z]\w*/g) || [];
+  if (camelMatches.some((m) => m.length >= 8)) return true;
+  // Function calls with explicit parens
+  if (/\b\w+\([^)]*\)/.test(text)) return true;
+  // Substantive backtick code (≥4 chars)
+  if (/`[^`]{4,}`/.test(text)) return true;
+  // Quoted strings ≥5 chars
+  if (/"[^"]{5,}"|'[^']{5,}'/.test(text)) return true;
+  return false;
 }
 
 function isObservationOnly(prompt) {

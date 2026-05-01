@@ -38,6 +38,15 @@
 
     "\\.markdownlint",
     "\\.cspell\\.json$",
-    "cspell\\.config\\."
+    "cspell\\.config\\.",
+
+    "playwright\\.config\\.",
+    "cypress\\.config\\.",
+    "karma\\.config\\.",
+    "ava\\.config\\.",
+    "mocharc",
+    "\\.storybook/",
+    "tailwind\\.config\\.",
+    "postcss\\.config\\."
   ]
 }

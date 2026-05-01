@@ -4,27 +4,22 @@
 // markers in Claude's response and auto-stores the pattern via the
 // prompt-pattern-store CLI.
 //
-// This closes the learning loop: previously, Claude was asked to
-// manually call the storage CLI on user approval — but the chaos test
-// showed Claude skipped this step 100% of the time. Now, simply
-// producing the enrichment markup IS the storage trigger.
-//
-// Why a Stop hook (not PostToolUse): the enrichment text appears in
-// the assistant's response, which is the input stdin to Stop hooks.
-// PostToolUse fires per-tool, not per-response.
-//
-// Pass-through: this hook always echoes input unchanged. It only
-// adds the side-effect of storing the pattern.
+// Phase G hardening (chaos-20260501-180536 findings):
+//   G1: spawnSync with explicit argv (no shell — prevents injection)
+//   G3: Strip fenced code blocks before regex match (prevents docs/
+//       persona files from poisoning the pattern store)
+//   G4: Refuse nested START/END markers (prevents inner-overrides-outer
+//       attacks)
+//   G6: KNOWN_KEYS allowlist in parseFields (prevents URLs in CONTEXT
+//       like HTTPS:// from being treated as new field keys)
 
-const { execSync } = require('child_process');
+const { spawnSync } = require('child_process');
 const fs = require('fs');
 const path = require('path');
 const { log: makeLogger } = require('./_log.js');
 const log = makeLogger('auto-store-enrichment');
 
 // Phase-F3: prompt-pattern-store.js was relocated to scripts/.
-// Resolve via candidates: ../../scripts/ (canonical), ../scripts/ (some
-// installs), ./ (compat with old layout).
 function resolveStoreScript() {
   const candidates = [
     path.join(__dirname, '..', '..', 'scripts', 'prompt-pattern-store.js'),
@@ -34,21 +29,61 @@ function resolveStoreScript() {
   for (const c of candidates) {
     try { fs.accessSync(c, fs.constants.F_OK); return c; } catch { /* next */ }
   }
-  return candidates[0]; // best-effort default
+  return candidates[0];
 }
 const STORE_SCRIPT = resolveStoreScript();
 
+// G3: Strip fenced code blocks (``` ... ```) from text before scanning
+// for markers. Without this, every docs example, README excerpt, persona
+// file, or assistant explanation showing the marker format silently
+// writes a phantom pattern.
+function stripCodeBlocks(text) {
+  // Remove triple-backtick fenced blocks (with optional language tag)
+  return text.replace(/```[\s\S]*?```/g, '');
+}
+
+// G4: Schema for known fields — prevents arbitrary ALL_CAPS:value lines
+// (e.g., HTTPS://example.com) from being mistaken for new field keys.
+const KNOWN_KEYS = new Set([
+  'RAW', 'CATEGORY', 'TECHNIQUES',
+  'INSTRUCTIONS', 'CONTEXT', 'INPUT', 'OUTPUT',
+]);
+
 // Parse [ENRICHED-PROMPT-START]...[ENRICHED-PROMPT-END] blocks from text.
-// Returns array of {raw, category, techniques, enriched, modified} objects.
+// G4: Refuse nested START markers — if a START is found within a block
+// before its matching END, the whole region is suspect and skipped.
 function extractEnrichments(text) {
-  const blockRegex = /\[ENRICHED-PROMPT-START\]([\s\S]*?)\[ENRICHED-PROMPT-END\]/g;
+  const cleaned = stripCodeBlocks(text);
   const enrichments = [];
-  let match;
-  while ((match = blockRegex.exec(text)) !== null) {
-    const body = match[1].trim();
+
+  // Find each START position; for each, find the next END that has no
+  // intervening START. Skip blocks with nested STARTs entirely.
+  let cursor = 0;
+  while (true) {
+    const startIdx = cleaned.indexOf('[ENRICHED-PROMPT-START]', cursor);
+    if (startIdx === -1) break;
+    const afterStart = startIdx + '[ENRICHED-PROMPT-START]'.length;
+
+    const nextStart = cleaned.indexOf('[ENRICHED-PROMPT-START]', afterStart);
+    const nextEnd = cleaned.indexOf('[ENRICHED-PROMPT-END]', afterStart);
+
+    if (nextEnd === -1) {
+      // Unclosed block — skip rest
+      log('skipped_unclosed', { startIdx });
+      break;
+    }
+
+    if (nextStart !== -1 && nextStart < nextEnd) {
+      // G4: nested START before END — refuse this block, advance past it
+      log('skipped_nested', { outerStart: startIdx, innerStart: nextStart });
+      cursor = afterStart;
+      continue;
+    }
+
+    const body = cleaned.slice(afterStart, nextEnd).trim();
     const fields = parseFields(body);
+
     if (fields.RAW && fields.RAW.trim().length > 0) {
-      // Reconstruct the enriched prompt (everything except RAW/CATEGORY/TECHNIQUES)
       const enriched = ['INSTRUCTIONS', 'CONTEXT', 'INPUT', 'OUTPUT']
         .filter((k) => fields[k])
         .map((k) => `**${k}**: ${fields[k]}`)
@@ -58,15 +93,20 @@ function extractEnrichments(text) {
         raw: fields.RAW.trim(),
         category: (fields.CATEGORY || 'uncategorized').trim().toLowerCase(),
         techniques: (fields.TECHNIQUES || '').trim(),
-        enriched: enriched || body, // fallback: store the whole block if structure missing
+        enriched: enriched || body,
         modified: false,
       });
     }
+
+    cursor = nextEnd + '[ENRICHED-PROMPT-END]'.length;
   }
+
   return enrichments;
 }
 
-// Parse "KEY: value" lines (multi-line values supported via continuation).
+// G6: parseFields with KNOWN_KEYS allowlist. Lines like "HTTPS://x" no
+// longer match the field-key pattern — they continue the previous field's
+// value instead.
 function parseFields(body) {
   const fields = {};
   let currentKey = null;
@@ -74,7 +114,7 @@ function parseFields(body) {
 
   for (const line of body.split('\n')) {
     const fieldMatch = line.match(/^([A-Z][A-Z_]+):\s*(.*)$/);
-    if (fieldMatch) {
+    if (fieldMatch && KNOWN_KEYS.has(fieldMatch[1])) {
       if (currentKey) fields[currentKey] = currentValue.join('\n').trim();
       currentKey = fieldMatch[1];
       currentValue = [fieldMatch[2]];
@@ -87,6 +127,7 @@ function parseFields(body) {
   return fields;
 }
 
+// G1: spawnSync with explicit argv array — no shell, no injection surface.
 function storePattern(enrichment) {
   try {
     const args = [
@@ -101,11 +142,24 @@ function storePattern(enrichment) {
     }
     args.push('--modified', String(enrichment.modified));
 
-    // Build a shell-safe command. Quote each arg.
-    const cmd = `node ${args.map((a) => `'${String(a).replace(/'/g, "'\\''")}'`).join(' ')}`;
-    const result = execSync(cmd, { encoding: 'utf8', timeout: 8000 });
+    const result = spawnSync(process.execPath, args, {
+      encoding: 'utf8',
+      timeout: 8000,
+      stdio: ['pipe', 'pipe', 'pipe'],
+    });
+
+    if (result.error) throw result.error;
+    if (result.status !== 0) {
+      log('store_failed', {
+        raw: enrichment.raw.slice(0, 80),
+        exitCode: result.status,
+        stderr: (result.stderr || '').slice(0, 200),
+      });
+      return null;
+    }
+
     log('stored', { raw: enrichment.raw.slice(0, 80), category: enrichment.category });
-    return result;
+    return result.stdout;
   } catch (err) {
     log('store_failed', { raw: enrichment.raw.slice(0, 80), error: err.message });
     return null;

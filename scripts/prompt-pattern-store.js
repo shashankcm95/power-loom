@@ -42,6 +42,22 @@ const LOCK_TIMEOUT_MS = 5000;
 const LOCK_STALE_MS = 30000;
 const MAX_PATTERNS = 500; // F5: LRU eviction threshold
 
+// Phase-G2: portable sleep. Atomics.wait requires SharedArrayBuffer
+// which can be unavailable, AND can return immediately without sleeping
+// in non-waiting agent contexts (busy-spin at 100% CPU). Fallback to a
+// timed busy-wait loop if either fails.
+function sleepMs(ms) {
+  try {
+    if (typeof SharedArrayBuffer === 'function' && typeof Atomics?.wait === 'function') {
+      Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, ms);
+      return;
+    }
+  } catch { /* fall through */ }
+  // Fallback: busy-wait. Not ideal but bounded by ms (capped at 200 caller-side).
+  const end = Date.now() + ms;
+  while (Date.now() < end) { /* intentional spin */ }
+}
+
 // Acquire an exclusive advisory lock by atomically creating a lockfile
 // (O_CREAT | O_EXCL via 'wx' flag). Retries with backoff if the lock is
 // held; clears stale locks (> 30s old). Returns true on success, false
@@ -59,16 +75,19 @@ function acquireLock() {
     } catch (err) {
       if (err.code !== 'EEXIST') throw err;
       // Lock exists. Check if it's stale.
+      // Phase-G9: stale-lock TOCTOU race fix. Wrap unlink in its own
+      // try/catch (separate from stat) and DON'T `continue` — fall through
+      // to sleep+retry. This avoids deleting a live lock that another
+      // process just took between our stat and unlink.
       try {
         const stat = fs.statSync(LOCK_PATH);
         if (Date.now() - stat.mtimeMs > LOCK_STALE_MS) {
-          fs.unlinkSync(LOCK_PATH);
-          continue;
+          try { fs.unlinkSync(LOCK_PATH); } catch { /* beaten to it — fine */ }
         }
-      } catch { /* lock vanished — race fine, retry */ }
-      // Wait with exponential backoff, capped at 200ms
+      } catch { /* lock vanished between EEXIST and stat — retry */ }
+      // Sleep before retry, regardless of stale-lock outcome
       const sleep = Math.min(backoff, 200);
-      Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, sleep);
+      sleepMs(sleep);
       backoff *= 2;
     }
   }

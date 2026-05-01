@@ -2,7 +2,7 @@
 
 ## Vagueness Detection Gate
 
-The deterministic UserPromptSubmit hook (`prompt-enrich-trigger.js`) evaluates **every** user prompt for vagueness — regardless of conversation continuity. When flagged, the hook injects a forcing instruction that you must follow.
+The deterministic UserPromptSubmit hook (`prompt-enrich-trigger.js`) evaluates **every** user prompt for vagueness — regardless of conversation continuity. When flagged, the hook injects a forcing instruction. Whether Claude follows it is best-effort instruction-following (see README §"What this toolkit is NOT"). The auto-store hook then captures the result deterministically when Claude does produce the markup — closing the loop on the deterministic side.
 
 **A prompt is vague if it lacks specifics about**:
 - **Clear task** — what specifically to do
