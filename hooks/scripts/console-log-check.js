@@ -6,6 +6,8 @@
 const { execSync } = require('child_process');
 const fs = require('fs');
 const path = require('path');
+const { log } = require('./_log.js');
+const logger = log('console-log-check');
 
 let input = '';
 process.stdin.setEncoding('utf8');
@@ -57,12 +59,15 @@ process.stdin.on('end', () => {
     }
 
     if (filesWithConsoleLog.length > 0) {
+      logger('warned', { count: filesWithConsoleLog.length, files: filesWithConsoleLog });
       const warning = `\n\n⚠ console.log detected in edited files:\n${filesWithConsoleLog.join('\n')}\nRemove before committing.`;
       process.stdout.write(input + warning);
     } else {
+      logger('clean', { scanned: changedFiles.length });
       process.stdout.write(input);
     }
-  } catch {
+  } catch (err) {
+    logger('error', { error: err.message });
     process.stdout.write(input);
   }
 });

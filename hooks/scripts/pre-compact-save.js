@@ -9,6 +9,8 @@
 const fs = require('fs');
 const path = require('path');
 const os = require('os');
+const { log } = require('./_log.js');
+const logger = log('pre-compact-save');
 
 // Deterministic checkpoint: extract key signals from the input
 function extractCheckpoint(inputText) {
@@ -68,14 +70,17 @@ let input = '';
 process.stdin.setEncoding('utf8');
 process.stdin.on('data', (chunk) => { input += chunk; });
 process.stdin.on('end', () => {
-  // DETERMINISTIC: always write checkpoint, regardless of LLM behavior
   try {
     const checkpoint = extractCheckpoint(input);
     writeCheckpoint(checkpoint);
-  } catch {
-    // Don't block compaction if checkpoint fails
+    logger('checkpoint_saved', {
+      contextLength: input.length,
+      mentionedFiles: checkpoint.mentionedFiles.length,
+      cwd: checkpoint.cwd,
+    });
+  } catch (err) {
+    logger('error', { error: err.message });
   }
 
-  // PROMPT: append instruction after input so it doesn't pollute the compact summary
   process.stdout.write(input + '\n\n---\n' + SAVE_PROMPT);
 });

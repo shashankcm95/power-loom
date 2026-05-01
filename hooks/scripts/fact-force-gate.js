@@ -17,6 +17,8 @@
 const fs = require('fs');
 const path = require('path');
 const os = require('os');
+const { log } = require('./_log.js');
+const logger = log('fact-force-gate');
 
 // Session-scoped tracker: isolates parallel agents and separate sessions
 const SESSION_ID = process.env.CLAUDE_SESSION_ID || process.env.CLAUDE_CONVERSATION_ID || String(process.ppid || 'default');
@@ -62,6 +64,7 @@ process.stdin.on('end', () => {
     const filePath = normalizePath(toolInput.file_path || toolInput.path || '');
 
     if (!filePath) {
+      logger('approve', { toolName, reason: 'no_file_path' });
       process.stdout.write(JSON.stringify({ decision: 'approve' }));
       return;
     }
@@ -69,24 +72,24 @@ process.stdin.on('end', () => {
     const tracker = loadTracker();
 
     if (toolName === 'Read') {
-      // Record that this file has been read
       tracker.files[filePath] = Date.now();
       saveTracker(tracker);
+      logger('read_recorded', { filePath });
       process.stdout.write(JSON.stringify({ decision: 'approve' }));
       return;
     }
 
-    // Edit or Write — check if file was read first
     if (toolName === 'Edit' || toolName === 'Write') {
       const wasRead = tracker.files[filePath];
 
-      // For Write to NEW files (that don't exist yet), allow without Read
       if (toolName === 'Write' && !fs.existsSync(filePath)) {
+        logger('approve', { toolName, filePath, reason: 'new_file' });
         process.stdout.write(JSON.stringify({ decision: 'approve' }));
         return;
       }
 
       if (!wasRead) {
+        logger('block', { toolName, filePath, reason: 'not_read' });
         process.stdout.write(JSON.stringify({
           decision: 'block',
           reason: `FACT-FORCING GATE: You must Read "${filePath}" before editing it. Read the file first to understand its current state, then retry the edit.`,
@@ -94,14 +97,15 @@ process.stdin.on('end', () => {
         return;
       }
 
+      logger('approve', { toolName, filePath, reason: 'previously_read' });
       process.stdout.write(JSON.stringify({ decision: 'approve' }));
       return;
     }
 
-    // Unknown tool — approve
+    logger('approve', { toolName, reason: 'unknown_tool' });
     process.stdout.write(JSON.stringify({ decision: 'approve' }));
-  } catch {
-    // On error, don't block workflow
+  } catch (err) {
+    logger('error', { error: err.message });
     process.stdout.write(JSON.stringify({ decision: 'approve' }));
   }
 });

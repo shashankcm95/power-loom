@@ -4,7 +4,21 @@ Transform vague user prompts into structured, actionable prompts that reduce mis
 
 ## When This Activates
 
-Called by the prompt-enrichment rule when a user message is detected as vague (missing 2+ of: clear task, scope, constraints, expected output).
+Called by the `prompt-enrich-trigger.js` UserPromptSubmit hook, which injects a `[PROMPT-ENRICHMENT-GATE]` instruction into Claude's context whenever a user prompt is classified as vague.
+
+## Step 0: Look up existing patterns FIRST
+
+Before building a new enrichment, check if a similar pattern is already stored. Run:
+
+```bash
+node ~/.claude/hooks/scripts/prompt-pattern-store.js lookup --raw "<raw user prompt>"
+```
+
+This returns JSON. Behavior depends on `bestMatch` and `bestMatchTier`:
+- `bestMatch.score >= 0.8` AND `bestMatchTier == "Independent"` (5+ approvals) → silently apply the stored enrichment, show only a one-line summary like *"Using your established pattern for {category} (5+ approvals)."* Skip steps 1–4.
+- `bestMatch.score >= 0.8` AND `bestMatchTier == "Trusted"` (3–4 approvals) → show one-line summary, auto-proceed unless user objects.
+- `bestMatch.score >= 0.8` AND `bestMatchTier == "Familiar"` (1–2 approvals) → show stored enrichment, ask "Look right?"
+- No match (or score < 0.8) → continue to Step 1 to build a new enrichment.
 
 ## Step 1: Classify and Select Techniques
 
@@ -81,31 +95,24 @@ Approve, modify, or say "just do it" to skip enrichment.
 
 ## Step 5: Store Pattern
 
-On approval, store the pattern for future reuse.
+On approval, **always** store the pattern by running the storage CLI:
 
-**If MemPalace MCP is available**, store in the `prompt-patterns` room:
-```
-Room: prompt-patterns
-Memory:
-  raw: "refactor the auth"
-  enriched: {instructions, context, input, output}
-  techniques: ["chain-of-thought", "rag"]
-  category: "refactor"
-  user_modified: true/false
-  modification_notes: "user narrowed scope to JWT only"
-  approval_count: 1
-  last_used: timestamp
+```bash
+node ~/.claude/hooks/scripts/prompt-pattern-store.js store \
+  --raw "<original user prompt>" \
+  --enriched "<full enriched prompt>" \
+  --category "<refactor|bugfix|feature|review|docs|other>" \
+  --techniques "chain-of-thought,rag" \
+  --modified "true|false"
 ```
 
-**If MemPalace is NOT available**, fall back to local storage:
-- Write to `~/.claude/prompt-patterns.json`
-- Same structure as above, stored as a JSON array of pattern objects
-- On subsequent sessions, read this file to check for recognized patterns
+This writes to `~/.claude/prompt-patterns.json` (the canonical local store, used regardless of MemPalace availability — it's the source of truth that the lookup step queries).
 
-On subsequent matches (fuzzy match against stored raws):
-- approval_count < 3: Show enriched prompt, ask for confirmation
-- approval_count >= 3: Auto-apply, show one-line summary only
-- User can always say "show me the full prompt" to review
+The CLI handles approval-count incrementing automatically: if a similar pattern (≥80% Jaccard similarity on word overlap) exists, it bumps that pattern's count. Otherwise it creates a new one.
+
+**Optional: also store in MemPalace** if MCP is available. Use `mcp__mempalace__store_memory` with the `prompt-patterns` room. The local JSON is the source of truth; MemPalace is for cross-machine semantic search.
+
+After storing, the CLI returns the new tier for that pattern. Tell the user briefly: *"Pattern stored — now at Familiar tier (2 approvals). One more and it'll auto-apply silently."*
 
 ## Step 6: Execute
 

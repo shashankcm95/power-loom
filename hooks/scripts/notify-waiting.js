@@ -12,24 +12,11 @@ const fs = require('fs');
 const path = require('path');
 const os = require('os');
 const { isClaudeFocused } = require('./_focus.js');
+const { log: makeLogger } = require('./_log.js');
+const log = makeLogger('notify-waiting');
 
 const COOLDOWN_MS = 20 * 1000;
 const COOLDOWN_FILE = path.join(os.tmpdir(), 'claude-notify-waiting-cooldown.json');
-
-// Diagnostic logging — always log invocations (lightweight, append-only).
-// Disable by setting CLAUDE_HOOKS_QUIET=1.
-const QUIET = process.env.CLAUDE_HOOKS_QUIET === '1';
-const LOG_DIR = path.join(os.homedir(), '.claude', 'logs');
-const LOG_FILE = path.join(LOG_DIR, 'notify-waiting.log');
-
-function log(event, details) {
-  if (QUIET) return;
-  try {
-    fs.mkdirSync(LOG_DIR, { recursive: true });
-    const entry = `[${new Date().toISOString()}] ${event}: ${JSON.stringify(details)}\n`;
-    fs.appendFileSync(LOG_FILE, entry);
-  } catch { /* non-critical */ }
-}
 
 function isInCooldown(notificationKey) {
   try {
