@@ -1,6 +1,6 @@
 # claude-toolkit
 
-A curated, opinionated enhancement layer for Claude Code. Eight hooks, eight rules, seven skills, five agents, and seven slash commands working together to make Claude more reliable, less hallucinatory, and continuously self-improving — across any project, any stack.
+A curated, opinionated enhancement layer for Claude Code. Six hooks, eight rules, seven skills, five agents, and seven slash commands working together to make Claude more reliable, less hallucinatory, and continuously self-improving — across any project, any stack.
 
 **Repository**: https://github.com/shashankcm95/claude-skills-consolidated
 
@@ -10,7 +10,7 @@ A curated, opinionated enhancement layer for Claude Code. Eight hooks, eight rul
 
 | Layer | Count | Invocation |
 |-------|-------|------------|
-| **Hooks** (deterministic scripts) | 8 | Automatic on Claude Code events |
+| **Hooks** (deterministic scripts) | 6 | Automatic on Claude Code events |
 | **Rules** (always-on guidance) | 8 | Injected into every session |
 | **Agents** (scoped specialists) | 5 | Claude delegates when needed |
 | **Skills** (workflow guides) | 7 | Claude matches to tasks |
@@ -24,16 +24,16 @@ A curated, opinionated enhancement layer for Claude Code. Eight hooks, eight rul
 2. **Read before write** — A PreToolUse hook blocks Edit/Write until the target file has been Read in the current session, eliminating hallucinated edits.
 3. **Vagueness has a deterministic gate** — A UserPromptSubmit hook detects vague prompts before Claude processes them and forces 4-part enrichment that's impossible to skip.
 4. **Memory at boundaries** — A PreCompact hook deterministically writes a checkpoint file, then prompts Claude to enrich it with MemPalace storage before context compression.
-5. **Focus-aware UX** — Notifications fire only when Claude Code is in the background; you don't get pinged while you're already watching the terminal.
-6. **Least privilege** — Each agent declares its tools and model tier explicitly. Opus for reasoning-heavy work (planner, architect), Sonnet for mechanical work (reviewer, optimizer).
-7. **Self-improvement loop** — Patterns flow from session memory → MemPalace → permanent rules as they prove themselves across multiple sessions.
-8. **Graceful degradation** — Every MemPalace dependency has a local-file fallback (`~/.claude/prompt-patterns.json`, `~/.claude/checkpoints/`).
+5. **Least privilege** — Each agent declares its tools and model tier explicitly. Opus for reasoning-heavy work (planner, architect), Sonnet for mechanical work (reviewer, optimizer).
+6. **Self-improvement loop** — Patterns flow from session memory → MemPalace → permanent rules as they prove themselves across multiple sessions.
+7. **Graceful degradation** — Every MemPalace dependency has a local-file fallback (`~/.claude/prompt-patterns.json`, `~/.claude/checkpoints/`).
+8. **Defer to native** — When Claude Code/Desktop has built-in functionality (e.g., dock-bounce notifications when the app needs attention), use that instead of reimplementing it.
 
 ---
 
 ## Component Deep-Dives
 
-### Hooks (8) — The Deterministic Layer
+### Hooks (6) — The Deterministic Layer
 
 Hook scripts run as external Node.js processes triggered by Claude Code's lifecycle events. They're the only layer with hard guarantees — pure logic, no LLM interpretation.
 
@@ -77,21 +77,7 @@ Two-phase save before context compression:
 
 The deterministic phase always succeeds, even if the LLM ignores the prompt. Instructions go *after* the input to avoid polluting the compacted summary.
 
-#### 6. `desktop-notify.js` — Completion Notification
-**Event**: `Stop` (async, non-blocking)
-
-Sends a desktop notification when Claude finishes a response. Uses `osascript` on macOS, `notify-send` on Linux, silently skipped elsewhere. **Focus-aware** via `_focus.js` — skipped if Claude/terminal is currently the frontmost app.
-
-#### 7. `notify-waiting.js` — Permission/Idle Notification
-**Event**: `Notification` (async, non-blocking)
-
-Fires when Claude is waiting for the user. Two notification types handled:
-- `permission_prompt`: *"Claude needs permission — Approve {tool_name} to continue."*
-- `idle_prompt`: *"Claude is waiting — Idle for {N}s — your input is needed."*
-
-**Inner logic**: 20-second cooldown per notification key (e.g., `permission:Bash`) stored in `tmpdir/claude-notify-waiting-cooldown.json` to prevent spam. Different macOS sounds per type (Ping for permission, Pop for idle, Glass for completion). Focus-aware. Override via `CLAUDE_NOTIFY_ALWAYS=1` or `CLAUDE_NOTIFY_NEVER=1`.
-
-#### 8. `prompt-enrich-trigger.js` — Vagueness Forcing Gate
+#### 6. `prompt-enrich-trigger.js` — Vagueness Forcing Gate
 **Event**: `UserPromptSubmit`
 
 Heuristic vagueness detection runs on every user prompt before Claude processes it (~5ms, regex-based, no I/O). Two-stage classification:
@@ -117,13 +103,13 @@ When vague, injects `[PROMPT-ENRICHMENT-GATE]` text that forces Claude to: check
 
 **Detection accuracy**: 24/24 on test corpus.
 
-#### `_focus.js` — Shared Focus Detection Helper
+#### Notifications — handled natively, not by the toolkit
 
-Detects whether Claude Code is currently the frontmost (focused) app:
-- **macOS**: `osascript` queries System Events for the frontmost application name
-- **Linux**: `xdotool getactivewindow getwindowname` returns the active window
-- Recognizes Claude Desktop, Claude Code, all major terminals (Terminal, iTerm2, Warp, Hyper, Alacritty, kitty, WezTerm, Tabby, Ghostty), and editors with integrated terminals (VS Code, Cursor, Windsurf, Zed)
-- Env var overrides: `CLAUDE_NOTIFY_ALWAYS=1`, `CLAUDE_NOTIFY_NEVER=1`
+Earlier versions of the toolkit included custom desktop notifications for permission prompts, idle states, and task completion. **Those have been removed** — Claude Desktop has a built-in setting that does this better:
+
+> **Settings → Draw attention on notifications**: "Bounce the dock icon or flash the taskbar when Claude needs your attention and the app is not focused."
+
+Enable that setting and you'll get focus-aware attention drawing without any of the toolkit's custom code. The toolkit focuses on what Claude doesn't already provide natively (anti-hallucination gates, prompt enrichment, memory persistence, etc.).
 
 ---
 
@@ -244,7 +230,7 @@ cd ~/Documents/claude-toolkit
 | `--agents` / `--rules` / `--hooks` / `--commands` / `--skills` | Install selectively |
 | `--diff` | Dry run: show what would change without installing |
 | `--backup` | Snapshot existing `~/.claude/` to `~/.claude/backups/backup-{timestamp}/` |
-| `--test` | Run 8-point smoke test suite after install (verifies hooks fire correctly) |
+| `--test` | Run 7-point smoke test suite after install (verifies hooks fire correctly) |
 
 ### Hook Configuration
 
@@ -284,7 +270,7 @@ claude-toolkit/
 │   ├── typescript/          # 1 language-specific rule
 │   └── web/                 # 1 framework-specific rule
 ├── hooks/
-│   ├── scripts/             # 8 hook scripts + 1 shared helper (_focus.js)
+│   ├── scripts/             # 6 hook scripts + _log.js helper + prompt-pattern-store CLI
 │   └── settings-reference.json  # Hook config template
 ├── commands/                # 7 slash command definitions
 ├── skills/                  # 7 skill workflow guides (each in own dir)
@@ -397,11 +383,11 @@ This toolkit is original code, but its architectural patterns and design philoso
 These are unique to this toolkit:
 - **Session-scoped fact-forcing tracker**: Per-session tracker file with atomic writes, prevents race conditions across parallel agents
 - **UserPromptSubmit forcing gate**: Heuristic vagueness detection that makes prompt enrichment impossible to skip — even in long conversations
-- **Focus-aware notifications**: Skipping notifications when Claude is the frontmost app, with cross-platform detection
 - **Confidence tiers for prompt patterns**: Learning → Familiar → Trusted → Independent automation ramp
 - **Hybrid deterministic + LLM pre-compact**: Deterministic checkpoint write paired with LLM-driven MemPalace enrichment
-- **Smoke test suite**: 8-point installer test verifying every hook fires correctly with synthetic input
+- **Smoke test suite**: 7-point installer test verifying every hook fires correctly with synthetic input
 - **MemPalace graceful degradation**: Local-file fallbacks for every MemPalace dependency
+- **Universal hook logging**: Shared `_log.js` module gives every hook auditable activity logs at `~/.claude/logs/`
 
 ---
 

@@ -55,21 +55,6 @@
         "id": "pre:config-guard"
       }
     ],
-    "Notification": [
-      {
-        "matcher": "permission_prompt|idle_prompt",
-        "hooks": [
-          {
-            "type": "command",
-            "command": "node HOME_DIR/.claude/hooks/scripts/notify-waiting.js",
-            "async": true,
-            "timeout": 10
-          }
-        ],
-        "description": "Desktop notification when Claude is waiting (permission or idle)",
-        "id": "notify:waiting"
-      }
-    ],
     "PreCompact": [
       {
         "matcher": "*",
@@ -96,19 +81,6 @@
         ],
         "description": "Warn about console.log statements in recently edited files",
         "id": "stop:console-check"
-      },
-      {
-        "matcher": "*",
-        "hooks": [
-          {
-            "type": "command",
-            "command": "node HOME_DIR/.claude/hooks/scripts/desktop-notify.js",
-            "async": true,
-            "timeout": 10
-          }
-        ],
-        "description": "macOS notification when Claude finishes a response",
-        "id": "stop:desktop-notify"
       }
     ]
   }
