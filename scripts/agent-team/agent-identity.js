@@ -18,7 +18,10 @@ const fs = require('fs');
 const path = require('path');
 const os = require('os');
 
-const STORE_PATH = path.join(os.homedir(), '.claude', 'agent-identities.json');
+// HETS_IDENTITY_STORE env var lets tests + ephemeral runs point at a temp file
+// without polluting the real registry. Default: ~/.claude/agent-identities.json.
+const STORE_PATH = process.env.HETS_IDENTITY_STORE ||
+  path.join(os.homedir(), '.claude', 'agent-identities.json');
 const LOCK_PATH = STORE_PATH + '.lock';
 
 // Default rosters — small enough to survive a single chaos run, large enough that
@@ -304,6 +307,89 @@ function cmdAssignChallenger(args) {
   });
 }
 
+// H.2.4 — trust-tiered verification policy. Translates per-identity trust
+// (from tierOf) into a verification recommendation: how much to verify,
+// whether to spawn a challenger, which expensive checks to skip.
+//
+// Policy table (per patterns/trust-tiered-verification.md):
+//   high-trust    → spot-check only;       no challenger;       skip noTextSimilarityToPriorRun
+//   medium-trust  → asymmetric challenger; 1 challenger;        skip nothing
+//   low-trust     → symmetric pair;        2 challengers;       skip nothing
+//   unproven      → treated as low-trust per pattern doc (cautious default)
+const VERIFICATION_POLICY = {
+  'high-trust': {
+    verification: 'spot-check-only',
+    spawnChallenger: false,
+    challengerCount: 0,
+    skipChecks: ['noTextSimilarityToPriorRun'],
+    rationale: 'High pass-rate over >=5 runs — full verification adds latency without catching new bugs',
+  },
+  'medium-trust': {
+    verification: 'asymmetric-challenger',
+    spawnChallenger: true,
+    challengerCount: 1,
+    skipChecks: [],
+    rationale: 'Mid pass-rate — full verification + 1 different-persona challenger catches asymmetric blind spots',
+  },
+  'low-trust': {
+    verification: 'symmetric-pair',
+    spawnChallenger: true,
+    challengerCount: 2,
+    skipChecks: [],
+    rationale: 'Low pass-rate or unproven — full verification + 2 challengers (different persona preferred) per asymmetric-challenger pattern',
+  },
+  'unproven': {
+    verification: 'symmetric-pair',
+    spawnChallenger: true,
+    challengerCount: 2,
+    skipChecks: [],
+    rationale: 'Under 5 runs — treated as low-trust per pattern doc until track record establishes',
+  },
+};
+
+function cmdTier(args) {
+  if (!args.identity) {
+    console.error('Usage: tier --identity <persona.name>');
+    process.exit(1);
+  }
+  const store = readStore();
+  const data = store.identities[args.identity];
+  if (!data) {
+    console.error(`Unknown identity: ${args.identity}`);
+    process.exit(1);
+  }
+  const total = data.verdicts.pass + data.verdicts.partial + data.verdicts.fail;
+  const passRate = total === 0 ? 0 : data.verdicts.pass / total;
+  console.log(JSON.stringify({
+    identity: args.identity,
+    tier: tierOf(data),
+    passRate: Math.round(passRate * 100) / 100,
+    totalRuns: total,
+    threshold: { highTrust: 0.8, mediumTrust: 0.5, minRuns: 5 },
+    verdicts: data.verdicts,
+  }, null, 2));
+}
+
+function cmdRecommendVerification(args) {
+  if (!args.identity) {
+    console.error('Usage: recommend-verification --identity <persona.name>');
+    process.exit(1);
+  }
+  const store = readStore();
+  const data = store.identities[args.identity];
+  if (!data) {
+    console.error(`Unknown identity: ${args.identity}`);
+    process.exit(1);
+  }
+  const tier = tierOf(data);
+  const policy = VERIFICATION_POLICY[tier];
+  console.log(JSON.stringify({
+    identity: args.identity,
+    tier,
+    ...policy,
+  }, null, 2));
+}
+
 function cmdRecord(args) {
   if (!args.identity || !args.verdict) {
     console.error('Usage: record --identity <persona.name> --verdict pass|partial|fail [--task <tag>] [--skills s1,s2]');
@@ -348,6 +434,8 @@ switch (cmd) {
   case 'init': cmdInit(); break;
   case 'assign': cmdAssign(args); break;
   case 'assign-challenger': cmdAssignChallenger(args); break;
+  case 'tier': cmdTier(args); break;
+  case 'recommend-verification': cmdRecommendVerification(args); break;
   case 'list': cmdList(args); break;
   case 'stats': cmdStats(args); break;
   case 'record': cmdRecord(args); break;

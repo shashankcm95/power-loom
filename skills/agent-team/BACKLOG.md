@@ -24,17 +24,20 @@ Deferred work from prior phases, captured here so nothing important gets silentl
 - **Symmetric-pair spawning** for top-of-tree (super-root) per asymmetric-challenger pattern's "When Not to Use" — currently no scaffolding for symmetric pairs. Likely lands as part of H.2.4 trust-tiered logic.
 - **Challenge-vs-claim binding** in the verifier: F3 only counts headings; could optionally validate that each `### CHALLENGE-N` quotes implementer text via a regex like `\*\*Implementer claim\*\*\s*\(quoted\)`. Useful for stricter enforcement once we see what real challenger outputs look like.
 
-### H.2.4 — Trust-tiered verification depth — LATENCY-CRITICAL
+### H.2.4 — Trust-tiered verification depth — SHIPPED
 
-**Status**: tier formula exists in `agent-identity.js` (basic); tier-driven spawn behavior pending.
+**Status**: shipped this turn. Queryable tier API + recommend-verification policy + `--skip-checks` verifier flag + symmetric-pair convention doc + `HETS_IDENTITY_STORE` env override for testability.
 
-**Scope**: Promote tier formula to a queryable API (`agent-identity tier --identity X`); add `--tier-policy` flag to chaos-test command; spawn-time decision: high-trust → no challenger, medium-trust → asymmetric challenger, low-trust → symmetric pair. Also extend to verification-check selection: high-trust skips a subset of expensive checks (e.g., `noTextSimilarityToPriorRun` doing pairwise file reads against prior runs).
+**What's wired** (per `kb:hets/symmetric-pair-conventions` + agent-identity.js `VERIFICATION_POLICY` table):
+- `agent-identity tier --identity X` → returns tier + passRate + totalRuns + threshold
+- `agent-identity recommend-verification --identity X` → returns full policy: `{ verification, spawnChallenger, challengerCount, skipChecks, rationale }`
+- `contract-verifier --skip-checks F4,A2,noTextSimilarityToPriorRun` → matches by check.id OR check.check name; records `status: 'skipped'` (not pass/fail) for audit clarity
 
-**Why latency-critical** (not just cost-aware): verification accumulates linearly with `N actors × M check types × per-check time`. At ~30s wall-clock per actor's verifier pass, 5 actors = ~2.5 min added to every run. Adding H.2.6 (`invokesRequiredSkills`, transcript scan) + H.2.7 (pattern contracts, code-shape checks) increases per-actor M. Without H.2.4 skipping checks for trusted identities, the system gets slow enough that "real-time" feedback is no longer achievable. Gemini critique correctly flagged this; promoted from cost-mitigation to latency-mitigation.
-
-**Dependencies**: H.2.3 (asymmetric challenger).
-
-**Estimate**: ~300 LoC + ~2hr.
+**Follow-up tasks** (deferred to a future phase):
+- **`--tier-policy` flag on chaos-test command** — opt-in per run; auto-queries `recommend-verification` for each spawned identity and applies the policy. Currently the orchestrator must call recommend-verification manually + pass `--skip-checks` accordingly. Estimate: ~50 LoC.
+- **`assign-pair --count N`** as a cleaner alternative to calling `assign-challenger` twice with `--exclude-identity`. Logged in symmetric-pair-conventions as open question. Estimate: ~30 LoC.
+- **Trust decay (exponential weighting of recent runs)** per pattern doc's failure mode #3 ("trust decay — old identities with stale track records over-trusted"). Estimate: ~80 LoC; needs design pass.
+- **Hysteresis on tier transitions** per pattern doc's failure mode #4 ("tier flip-flop"). Estimate: ~30 LoC.
 
 ### H.2.5 — Tech-stack analyzer + skill-bootstrapping orchestrator wiring
 

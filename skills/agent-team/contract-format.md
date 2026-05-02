@@ -92,6 +92,18 @@ The verifier check `invokesRequiredSkills` (planned for H.2.6) will skip enforce
 | `acknowledgesFallback` | If a fallback was used, it's explicitly stated | none |
 | `noDuplicateFindingIds` | Each finding has a unique identifier | none |
 
+## Verifier CLI flags
+
+| Flag | Purpose | Introduced |
+|------|---------|------------|
+| `--contract <path>` | Path to contract JSON | H.1 |
+| `--output <path>` | Path to agent output to verify | H.1 |
+| `--previous-run <dir>` | Prior-run directory for `noTextSimilarityToPriorRun` | H.1 |
+| `--no-record` | Don't forward to pattern-recorder | H.1 |
+| `--identity <persona.name>` | Per-identity recording (forwards to agent-identity.js) | H.2-bridge |
+| `--skills <s1,s2,...>` | Skills the actor invoked (forwards to recorder) | H.2-bridge |
+| `--skip-checks <ids-or-names>` | Comma-separated `check.id` (e.g. `F4,A2`) or `check.check` (e.g. `noTextSimilarityToPriorRun`) to skip. Skipped checks record `status: 'skipped'`. Use with `agent-identity recommend-verification` output. | H.2.4 |
+
 ## Verdict outcomes
 
 After running all checks:

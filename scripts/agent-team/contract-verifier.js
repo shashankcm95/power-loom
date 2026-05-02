@@ -203,7 +203,23 @@ let functionalFailures = 0;
 let antiPatternFailures = 0;
 let antiPatternWarns = 0;
 
+// H.2.4 — trust-tiered verification: --skip-checks lets the orchestrator
+// skip expensive checks for high-trust identities. Skip set matches by
+// EITHER check.id (e.g., "F4", "A2") OR check.check name (e.g.,
+// "noTextSimilarityToPriorRun"). Skipped checks record status='skipped'
+// (not pass/fail) so the audit trail remains explicit.
+const skipSet = new Set(
+  (args['skip-checks'] || '').split(',').map((s) => s.trim()).filter(Boolean)
+);
+function shouldSkip(check) {
+  return skipSet.has(check.id) || skipSet.has(check.check);
+}
+
 for (const check of contract.functional || []) {
+  if (shouldSkip(check)) {
+    result.functional[check.id] = { check: check.check, status: 'skipped', reason: 'tier-policy' };
+    continue;
+  }
   const fn = functionalChecks[check.check];
   if (!fn) {
     result.functional[check.id] = { check: check.check, status: 'unknown_check' };
@@ -220,6 +236,10 @@ for (const check of contract.functional || []) {
 }
 
 for (const check of contract.antiPattern || []) {
+  if (shouldSkip(check)) {
+    result.antiPattern[check.id] = { check: check.check, status: 'skipped', reason: 'tier-policy' };
+    continue;
+  }
   const fn = antiPatternChecks[check.check];
   if (!fn) {
     result.antiPattern[check.id] = { check: check.check, status: 'unknown_check' };
