@@ -1,0 +1,42 @@
+{
+  "version": 1,
+  "entries": {
+    "hets/identity-roster": {
+      "path": "hets/identity-roster.md",
+      "version": 1,
+      "hash": "8278d7ca5f6b1deed3152af68a77675932f7758c3adcd947ef11ead867c897b6",
+      "shortHash": "8278d7ca",
+      "tags": [
+        "hets",
+        "identity",
+        "roster"
+      ],
+      "lastUpdated": "2026-05-02T12:14:56.950Z"
+    },
+    "hets/spawn-conventions": {
+      "path": "hets/spawn-conventions.md",
+      "version": 1,
+      "hash": "10429c4c5951c30ab2e557673c12259eb462fe1742d85d7068d0e0b25b9365b6",
+      "shortHash": "10429c4c",
+      "tags": [
+        "hets",
+        "conventions",
+        "spawn"
+      ],
+      "lastUpdated": "2026-05-02T12:14:56.955Z"
+    },
+    "web-dev/react-essentials": {
+      "path": "web-dev/react-essentials.md",
+      "version": 1,
+      "hash": "fddb4cdd0a338fb260ea6fb3e11b4498a72c3edd32ecf113c3ced3cd693b4bf9",
+      "shortHash": "fddb4cdd",
+      "tags": [
+        "web",
+        "frontend",
+        "react",
+        "javascript"
+      ],
+      "lastUpdated": "2026-05-02T12:14:56.955Z"
+    }
+  }
+}

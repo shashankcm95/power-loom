@@ -188,14 +188,39 @@ Reusable patterns extracted from HETS development live in `patterns/`. Each patt
 | [Agent Identity & Reputation](patterns/agent-identity-reputation.md) | implementing |
 | [Meta-Validation](patterns/meta-validation.md) | active |
 | [Prompt Distillation](patterns/prompt-distillation.md) | implementing |
+| [Shared Knowledge Base](patterns/shared-knowledge-base.md) | implementing |
+| [Content-Addressed References](patterns/content-addressed-refs.md) | implementing |
+| [Skill Bootstrapping](patterns/skill-bootstrapping.md) | proposed |
+| [Tech-Stack Analyzer](patterns/tech-stack-analyzer.md) | proposed |
 
 To target a pattern in a future chaos run, read its "Validation Strategy" section — each lists concrete failure modes and how an actor could stress them. `chaos-test --pattern <name>` is planned for full H.2.
+
+## Shared knowledge base (Phase H.2-bridge.2)
+
+`kb/` is the team's shared documentation — one source of truth, content-addressed, snapshot-frozen per run. See [shared-knowledge-base pattern](patterns/shared-knowledge-base.md) and `kb/README.md`.
+
+```bash
+# At run start: freeze the manifest into the run-state dir
+node scripts/agent-team/kb-resolver.js snapshot ${RUN_ID}
+
+# In spawn prompts: hand actors refs (not inlined content)
+# Example skills block: "your KB scope: kb:hets/spawn-conventions@10429c4c"
+
+# Actor's first action: resolve the ref
+node scripts/agent-team/kb-resolver.js resolve kb:hets/spawn-conventions@10429c4c
+```
+
+Refs of the form `kb:<id>@<short-hash>` validate the doc hasn't drifted since the snapshot. See [content-addressed-refs pattern](patterns/content-addressed-refs.md). Starter KB:
+- `kb:hets/spawn-conventions` — the canonical 5-step spawn convention
+- `kb:hets/identity-roster` — per-persona identity rosters
+- `kb:web-dev/react-essentials` — reference doc for the planned `09-react-frontend` persona
 
 ## Files in this skill
 
 - `SKILL.md` — this file
 - `contract-format.md` — full spec for contract JSON
 - `patterns/` — reusable architectural patterns (this is the substrate for new simulations)
+- `kb/` — shared knowledge base (content-addressed, frozen-per-run)
 - `role-templates/pm.md` — super-agent role template
 - `role-templates/senior.md` — orchestrator role template
 - `role-templates/engineer.md` — actor role template
@@ -206,6 +231,7 @@ To target a pattern in a future chaos run, read its "Validation Strategy" sectio
 - `contract-verifier.js` — runs functional + anti-pattern checks (post-fix: prototype-pollution-safe, .every semantics, valid JS regex for end-of-input)
 - `pattern-recorder.js` — appends results to ~/.claude/agent-patterns.json; forwards `--identity` to agent-identity.js when supplied
 - `agent-identity.js` — assign/list/stats/record per-identity; round-robin assignment with file-locked persistence to ~/.claude/agent-identities.json
+- `kb-resolver.js` — content-addressed KB resolver (cat / hash / list / resolve / scan / snapshot / register)
 - (Phase H.2: `trust-tracker.js` — persists per-persona trust scores)
 - (Phase H.2: `budget-manager.js` — handles on-demand token extensions)
 
@@ -213,4 +239,5 @@ To target a pattern in a future chaos run, read its "Validation Strategy" sectio
 
 - **H.1 (shipped)**: tree tracking, functional + anti-pattern contracts, self-learning recorder
 - **H.2-bridge (this phase)**: verifier-bug fixes (C-1 prototype pollution, H-1 `.some` semantics, `\Z` regex), persona-skills mapping in contracts, identity registry + per-identity recording, patterns library
-- **H.2 (next)**: trust scoring with persistence + trust-tiered review depth, on-demand budget extensions, full pattern contracts (structural code review), `invokesRequiredSkills` verifier check (transcript-driven), asymmetric challenger spawning, `chaos-test --pattern <name>`
+- **H.2-bridge.2 (this phase)**: shared knowledge base + content-addressed refs (`kb-resolver.js`), 4 new pattern docs (shared-KB, content-addressed-refs, skill-bootstrapping, tech-stack-analyzer), 3 starter KB docs
+- **H.2 (next)**: trust scoring with persistence + trust-tiered review depth, on-demand budget extensions, full pattern contracts (structural code review), `invokesRequiredSkills` verifier check (transcript-driven), asymmetric challenger spawning, `chaos-test --pattern <name>`, builder personas (06-12), tech-stack analyzer + skill bootstrapping orchestrator wiring
