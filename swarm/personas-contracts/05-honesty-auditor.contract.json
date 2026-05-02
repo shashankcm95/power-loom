@@ -4,7 +4,12 @@
   "role": "actor",
   "skills": {
     "required": ["self-improve"],
-    "recommended": ["prune", "agent-team"]
+    "recommended": ["prune", "agent-team"],
+    "skill_status": {
+      "self-improve": "available",
+      "prune": "not-yet-authored",
+      "agent-team": "available"
+    }
   },
   "budget": {
     "tokens": 25000,

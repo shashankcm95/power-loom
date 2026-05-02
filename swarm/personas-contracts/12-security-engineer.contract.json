@@ -10,7 +10,7 @@
       "engineering:code-review": "marketplace:knowledge-work-plugins/engineering",
       "engineering:incident-response": "marketplace:knowledge-work-plugins/engineering",
       "legal:compliance-check": "marketplace:knowledge-work-plugins/legal",
-      "security-audit": "available",
+      "security-audit": "not-yet-authored",
       "cryptography": "not-yet-authored",
       "iam": "not-yet-authored",
       "compliance-frameworks": "not-yet-authored"

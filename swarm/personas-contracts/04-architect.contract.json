@@ -4,7 +4,13 @@
   "role": "actor",
   "skills": {
     "required": ["plan"],
-    "recommended": ["agent-team", "review", "research-mode"]
+    "recommended": ["agent-team", "review", "research-mode"],
+    "skill_status": {
+      "plan": "not-yet-authored",
+      "agent-team": "available",
+      "review": "not-yet-authored",
+      "research-mode": "available"
+    }
   },
   "budget": {
     "tokens": 30000,
