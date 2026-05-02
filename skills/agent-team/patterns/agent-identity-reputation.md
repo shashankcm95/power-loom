@@ -2,7 +2,7 @@
 pattern: agent-identity-reputation
 status: implementing
 intent: Personas as roles; identities as persistent named instances accumulating per-identity trust.
-related: [trust-tiered-verification, persona-skills-mapping, hets]
+related: [trust-tiered-verification, persona-skills-mapping, hets, prompt-distillation]
 ---
 
 ## Summary

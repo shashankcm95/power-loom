@@ -2,7 +2,7 @@
 pattern: convergence-as-signal
 status: observed
 intent: Different personas independently surfacing the same finding = high-confidence signal.
-related: [asymmetric-challenger, hets]
+related: [asymmetric-challenger, hets, structural-code-review]
 ---
 
 ## Summary

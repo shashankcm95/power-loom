@@ -4,7 +4,12 @@
   "role": "actor",
   "skills": {
     "required": ["security-audit"],
-    "recommended": ["review", "research-mode"]
+    "recommended": ["review", "research-mode"],
+    "skill_status": {
+      "security-audit": "not-yet-authored",
+      "review": "not-yet-authored",
+      "research-mode": "available"
+    }
   },
   "budget": {
     "tokens": 30000,
