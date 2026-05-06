@@ -2,6 +2,29 @@
 
 Deferred work from prior phases, captured here so nothing important gets silently dropped. Each entry: scope, rationale, dependencies, rough estimate.
 
+## Phase H.6.8 — first post-H.6.7 orchestration test (H.6.1 closure) — SHIPPED
+
+**Status**: shipped. Re-ran H.6.1's aborted task end-to-end after H.6.2-H.6.7 substrate fixes. `13-node-backend.kira` PASSED across all 9 functional + 5 antiPattern checks (6 findings, 33 file citations, recommendation `accept`). Authored `node-backend-development` skill at root from `nodejs.org/docs/latest/api/` (H.6.7 canonical-source path); updated contract `skill_status: not-yet-authored → available`; spawned in foreground; verified independently via contract-verifier; recorded verdict to identity (kira: passRate 0.6 → 0.667, tier stays medium-trust).
+
+**3 capability gaps surfaced** (H.6.5 missing-capability-signal):
+- forge-skill `express` (KB sufficient for current task; revisit on first Express-feature build)
+- forge-skill `postgres-engineering` (no DB writes in this task; revisit when query/pool work surfaces)
+- author-kb-doc `backend-dev/redis-pool-patterns` (Redis client lifecycle relevant to this task; agent inferred design without ground to cite — ~1 hr authoring)
+
+All 3 deferred to backlog, not blocking.
+
+**Meta-finding** (small-fix candidate): agent's first-pass had findings under generic `## Findings`; verifier's `minFindings` counts entries under severity sections (`## HIGH`, etc.). Update `kb:hets/spawn-conventions` to be explicit about counting location.
+
+**Tasks 2-5 (queued next)**:
+| # | Task | Persona | Forge needed |
+|---|------|---------|--------------|
+| 2 | "Build a search-results-with-pagination component for our React app" | 09-react-frontend | `react` (canonical: react.dev/reference) |
+| 3 | "Author a Kubernetes Deployment + Service manifest for our Node API" | 10-devops-sre | `kubernetes` (canonical: kubernetes.io/docs/home/) |
+| 4 | "Audit our auth flow for OAuth2 token-handling vulnerabilities" | 12-security-engineer | reuse mio's `security-audit` (no forge) |
+| 5 | "Build an ETL pipeline that ingests CSV uploads into Postgres with dedup" | 11-data-engineer | `postgres-engineering` (no canonical-source entry — generic fallback) |
+
+Each ~7 min wallclock + ~80K tokens; sequential execution to avoid background-spawn loss (CS-1 / CS-3 lessons).
+
 ## Phase H.7.0 — evolution loop (DEFERRED — needs population data)
 
 **Status**: deferred. Design constraints documented; implementation gated on data accumulation.

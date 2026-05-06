@@ -6,7 +6,7 @@
     "required": ["node-backend-development"],
     "recommended": ["express", "nest-js", "typescript", "postgres-engineering", "engineering:debug", "engineering:testing-strategy", "engineering:deploy-checklist", "engineering:code-review", "engineering:system-design"],
     "skill_status": {
-      "node-backend-development": "not-yet-authored",
+      "node-backend-development": "available",
       "express": "not-yet-authored",
       "nest-js": "not-yet-authored",
       "typescript": "not-yet-authored",
