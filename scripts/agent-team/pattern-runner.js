@@ -18,8 +18,12 @@
 const fs = require('fs');
 const path = require('path');
 
+// H.7.14 — `PATTERNS_BASE` second fallback now uses shared `findToolkitRoot()`
+// helper (from `_lib/toolkit-root.js`) instead of hardcoded path.
+// Env override (HETS_PATTERNS_DIR) preserved as primary fallback.
+const { findToolkitRoot } = require('./_lib/toolkit-root');
 const PATTERNS_BASE = process.env.HETS_PATTERNS_DIR ||
-  path.join(process.env.HOME, 'Documents', 'claude-toolkit', 'skills', 'agent-team', 'patterns');
+  path.join(findToolkitRoot(), 'skills', 'agent-team', 'patterns');
 
 function parseArgs(argv) {
   const args = {};

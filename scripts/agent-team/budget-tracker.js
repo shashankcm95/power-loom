@@ -24,8 +24,12 @@ const { withLock } = require('./_lib/lock'); // H.3.2 (CS-1 hacker.zoe CRIT-4)
 // H.5.5 (CS-2/CS-3 theo HIGH): single-source RUN_STATE_BASE via _lib/runState.
 const { runStateDir } = require('./_lib/runState');
 
+// H.7.14 — `CONTRACTS_BASE` second fallback now uses shared `findToolkitRoot()`
+// helper (from `_lib/toolkit-root.js`) instead of hardcoded path.
+// Env override (HETS_CONTRACTS_DIR) preserved as primary fallback.
+const { findToolkitRoot } = require('./_lib/toolkit-root');
 const CONTRACTS_BASE = process.env.HETS_CONTRACTS_DIR ||
-  path.join(process.env.HOME, 'Documents', 'claude-toolkit', 'swarm', 'personas-contracts');
+  path.join(findToolkitRoot(), 'swarm', 'personas-contracts');
 
 function parseArgs(argv) {
   const args = { _: [] };
