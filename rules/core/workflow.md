@@ -43,6 +43,28 @@ Before deploying, follow the deploy-checklist skill for the full pre-deployment 
 - Drift notes feed the auto-loop's session-end review (`rules/core/self-improvement.md`).
 - Per the H.7.9 meta-discipline directive: conversations and tasks are the primary plugin testing framework; pattern-emergence observations promote to substrate refinement.
 
+## Markdown emphasis discipline (H.7.18)
+
+When writing markdown (`.md` files), wrap underscore-bearing tokens in backticks. The markdown emphasis parser sees `_token_` as italic emphasis. When unbackticked tokens like `HETS_TOOLKIT_DIR`, `_h70-test`, `_lib/`, `RUN_STATE_BASE`, or `_readPersonaContract` appear in the same paragraph as another underscore (with whitespace between), markdownlint MD037 ("no-space-in-emphasis") triggers and CI fails.
+
+Token shapes that need backticks:
+
+- **Env-var-style** (multi-underscore uppercase): `HETS_TOOLKIT_DIR`, `CLAUDE_PLUGIN_ROOT`, `RUN_STATE_BASE`, `WEIGHTS_VERSION`, `MODULE_NOT_FOUND`
+- **Underscore-prefixed identifier**: `_h70-test`, `_lib/file-path-pattern`, `_readPersonaContract`, `_log.js`
+- **Snake-lower** in dense paragraphs: `weights_version`, `route_decision` (only when paired)
+
+Examples:
+
+```markdown
+❌ HETS_TOOLKIT_DIR || path.join(process.env.HOME, ...)
+✓  `HETS_TOOLKIT_DIR` || `path.join(process.env.HOME, ...)`
+
+❌ tests passed: 41/41 _h70-test; 0 contract violations
+✓  tests passed: 41/41 `_h70-test`; 0 contract violations
+```
+
+The H.7.18 `validate-markdown-emphasis.js` PostToolUse hook detects this pattern and emits `[MARKDOWN-EMPHASIS-DRIFT]` for awareness. The hook is forward-looking; it doesn't auto-fix existing markdown.
+
 ## CI infrastructure changes (H.7.15)
 
 - When adding CI workflows, install scripts, or other infrastructure that runs only at merge time / install time / CI time, **validate against a clean / non-author environment before merging**. The H.7.8 CI bug (PR #79 H.7.9 surfaced it: `bash install.sh --test` tested already-installed hooks at `$CLAUDE_DIR/hooks/scripts/`, which doesn't exist on a fresh CI checkout) and the `install_hooks` subdir-glob bug (H.7.12 surfaced it: `validators/` and `_lib/` subdirectories were never being copied) BOTH shipped because the original phases never ran the new infrastructure against a fresh environment.

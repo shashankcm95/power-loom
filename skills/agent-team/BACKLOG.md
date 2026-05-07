@@ -2,6 +2,78 @@
 
 Deferred work from prior phases, captured here so nothing important gets silently dropped. Each entry: scope, rationale, dependencies, rough estimate.
 
+## Phase H.7.18 — Markdown emphasis validator (closes drift-note 19) — SHIPPED
+
+**Status**: shipped per approved plan. Closes drift-note 19 from this session — the underscore-emphasis bug that bit me 3 times (H.7.14 commit b6e73ec; H.7.15 commits 6ad2299 + an earlier one). Each fix cost a few minutes; cumulative ~15-20 min + 3 extra CI rounds.
+
+### The bug pattern
+
+Dense markdown paragraphs with unbackticked underscore-bearing tokens (e.g., `HETS_TOOLKIT_DIR`, `_h70-test`, `_lib/`, `RUN_STATE_BASE`, `MODULE_NOT_FOUND`) trigger markdownlint MD037 ("no-space-in-emphasis") because the markdown parser sees `_token_` as italic emphasis. When a paragraph has 2+ such tokens with whitespace between, the parser tries to pair them as emphasis-open / emphasis-close and complains about the whitespace inside the perceived emphasis.
+
+### Pre-plan audit (Explore agent at user request)
+
+User-requested audit before plan finalization:
+
+- **Confirmed-broken** (CI failing): 0 (main is green ✓)
+- **Latent-broken** (clusters that would trigger H.7.18 validator on next edit):
+  - `skills/agent-team/BACKLOG.md` — **4 multi-token clusters** (HIGH risk):
+    - Line 252: `HETS_TOOLKIT_DIR` + `CLAUDE_PLUGIN_ROOT` pair
+    - Line 264: `HETS_TOOLKIT_DIR` + `CLAUDE_PLUGIN_ROOT` pair
+    - Line 414: `CLAUDE_DIR` + `MODULE_NOT_FOUND` pair
+    - Plus 1 more drift-note 10 entry pair
+  - `skills/agent-team/SKILL.md` — 1 mega-cluster (MEDIUM)
+  - `CHANGELOG.md` — 1 cluster (MEDIUM)
+  - `H.7.4-findings.md` — 1 cluster, low risk
+
+Audit recommendation: forward-only validator. Slight-strengthen: spot-fix the 4 known `BACKLOG.md` clusters as part of H.7.18 to keep dogfood story clean (the very next `BACKLOG.md` edit — this very entry — would otherwise trigger the new validator). Done inline.
+
+### What landed
+
+- **NEW `hooks/scripts/validators/validate-markdown-emphasis.js`** (~165 LoC): PostToolUse:Edit|Write validator. Path filter `.md` files only. Strips fenced code blocks + inline code spans + frontmatter before scanning. Detection patterns: env-var-style (multi-underscore uppercase), underscore-prefixed identifier. Tiered enforcement:
+  - **Tier 1** (likely-MD037-triggering): 2+ unbackticked underscore-bearing tokens in same paragraph → emit `[MARKDOWN-EMPHASIS-DRIFT]` to stdout (8th in forcing-instruction family)
+  - **Tier 2** (style suggestion): 1 isolated token → stderr informational only
+- **`hooks/hooks.json`**: 4th PostToolUse entry (matcher `Edit|Write`); now 14 total hooks
+- **`install.sh` tests 19-21** (NEW): Tier 1 cluster fires; backticked tokens stay silent (no false positive); non-`.md` path silent (path filter)
+- **`rules/core/workflow.md`**: NEW section "Markdown emphasis discipline (H.7.18)" with examples
+- **`skills/agent-team/patterns/validator-conventions.md`**: NEW Convention C — tiered enforcement matches actual writing variance. Links H.7.12 + H.7.18 reference implementations.
+- **`docs/hooks/README.md`**: hook count 13 → 14; new validator row
+- **`skills/agent-team/BACKLOG.md` cluster sweep** (this very file): 4 known clusters fixed inline by wrapping `HETS_TOOLKIT_DIR`, `CLAUDE_PLUGIN_ROOT`, `MODULE_NOT_FOUND`, `validators/`, `$CLAUDE_DIR`, `validate-plan-schema.js` references in backticks
+
+### Verification
+
+- ✓ Probe 1: `bash install.sh --hooks --test` → **21/21 passing** (was 18/18; +3 H.7.18 tests)
+- ✓ Probe 2: `node scripts/agent-team/contracts-validate.js` → 0 violations
+- ✓ Probe 3: `node scripts/agent-team/_h70-test.js` → 46/46 passing (regression)
+- ✓ Probe 4: `node --check hooks/scripts/validators/validate-markdown-emphasis.js` → syntax-ok
+- ✓ Probe 5: synthetic Tier 1 cluster → `[MARKDOWN-EMPHASIS-DRIFT]` emitted with token list
+- ✓ Probe 6: synthetic backticked tokens → silent (no false positive)
+- ✓ Probe 7: non-`.md` path → silent (path filter excludes)
+- ✓ Probe 8: `npx markdownlint-cli2` on `BACKLOG.md` post-sweep → 0 errors
+
+### Drift-notes captured this phase
+
+- **Drift-note 26**: drift-note 19 took 7 phases (H.7.14 → H.7.15 → H.7.15-fix → H.7.16 → H.7.17 → H.7.18) to reach the "build a validator" decision. Pattern: small recurring annoyances accumulate "minor cost" → eventually justify substrate addition. Worth tracking decision-latency from first-occurrence to fix.
+- **Drift-note 27**: this validator's path filter is `*.md` — covers ALL markdown writes. Tier 1/2 split + only-when-2+-tokens-in-paragraph heuristic should keep noise low. Monitor for FP rate on next phases.
+
+### Honest tradeoffs
+
+- **Not exhaustive cleanup**: only `BACKLOG.md`'s 4 known clusters fixed in this phase. `SKILL.md` mega-cluster + `CHANGELOG.md` cluster + `H.7.4-findings.md` left as-is. Validator catches them on next edit; spot-fix discipline.
+- **Not auto-fix**: validator only detects + emits forcing instruction; doesn't rewrite content. User/Claude does the backtick fix.
+- **Not editor-integrated**: hook fires only when Claude uses `Write`/`Edit` tools. User edits via vscode etc. bypass it. Acceptable since primary user is Claude itself.
+
+### H.7.18 follow-ups (deferred)
+
+- **H.7.19 candidate**: drift-note 25 (PreToolUse-vs-PostToolUse audit across toolkit)
+- **H.7.20+ candidate (future arc)**: drift-note 21 (forcing-instruction architectural smell — now 8 forcing instructions in the family); drift-note 26 (decision-latency meta-tracking); drift-note 27 (over-fire monitoring after empirical data accumulates)
+
+### Why this is the right shape
+
+- Closes drift-note 19 with the canonical validator-family pattern
+- Forward-looking: prevents H.7.14/H.7.15-class CI failures going forward
+- Honors drift-note 25 lesson by defaulting to PostToolUse:Edit|Write
+- Reinforces H.7.12 tiered-enforcement convention as a documented pattern (Convention C)
+- Twenty-second distinct phase shape: targeted-recurring-bug validator addition
+
 ## Phase H.7.17 — Migrate validate-plan-schema.js to PostToolUse:Write (closes drift-note 10 fully) — SHIPPED
 
 **Status**: shipped per approved plan. Closes drift-note 10 definitively (was partially closed in H.7.16 pending fresh-session test).
@@ -249,7 +321,7 @@ mira agrees with theo's H.7.3 architecture wholesale; her design extends substra
 
 ### What landed
 
-- **NEW `scripts/agent-team/_lib/toolkit-root.js`** (~88 LoC) — single canonical `findToolkitRoot()` helper extracted from contracts-validate.js's H.7.10 inline copy. Exports `findToolkitRoot()` function + cached `TOOLKIT_ROOT` constant. Full priority chain (HETS_TOOLKIT_DIR → CLAUDE_PLUGIN_ROOT → cwd-with-sentinel → walk-up-8-deep → hardcoded LAST). JSDoc'd per H.7.13 convention. Header comment matches H.5.5 runState.js / H.3.2 lock.js extraction-history style.
+- **NEW `scripts/agent-team/_lib/toolkit-root.js`** (~88 LoC) — single canonical `findToolkitRoot()` helper extracted from contracts-validate.js's H.7.10 inline copy. Exports `findToolkitRoot()` function + cached `TOOLKIT_ROOT` constant. Full priority chain (`HETS_TOOLKIT_DIR` → `CLAUDE_PLUGIN_ROOT` → cwd-with-sentinel → walk-up-8-deep → hardcoded LAST). JSDoc'd per H.7.13 convention. Header comment matches H.5.5 runState.js / H.3.2 lock.js extraction-history style.
 - **`contracts-validate.js`**: replaced inline 30-LoC `findToolkitRoot()` with single `require('./_lib/toolkit-root')` — net LoC reduction
 - **`_lib/runState.js`**: `RUN_STATE_BASE` derived via `findToolkitRoot()` instead of hardcoded path
 - **`kb-resolver.js`**: `KB_BASE` derived via helper; preserves `HETS_KB_DIR` primary fallback
@@ -411,10 +483,10 @@ The polish-class counter_signals correctly suppressed over-routing on this purel
 
 ### Drift-notes captured during this phase
 
-- **Drift-note 10**: theo's H.7.9 Section C said "PostToolUse:Write hook is feasible" but Phase 1 inventory found zero PostToolUse:Write entries in `hooks/hooks.json` — only PostToolUse:Bash exists. Whether Claude Code globally supports PostToolUse:Write is open empirical question. Workaround: PreToolUse:Write matches existing validator family. Architectural note for theo's future review: H.7.9 design assumed a trigger that may not exist.
+- **Drift-note 10**: theo's H.7.9 Section C said "PostToolUse:Write hook is feasible" but Phase 1 inventory found zero `PostToolUse:Write` entries in `hooks/hooks.json` — only `PostToolUse:Bash` exists. Whether Claude Code globally supports `PostToolUse:Write` is open empirical question. Workaround: `PreToolUse:Write` matches existing validator family. Architectural note for theo's future review: H.7.9 design assumed a trigger that may not exist.
 - **Drift-note 11**: dogfood failure on H.7.11 plan revealed canonical template too ambitious vs actual plan-writing discipline. Tiered enforcement is the honest fix — Tier 1 captures truly load-bearing, Tier 2 only enforces when /build-plan-style new-style detected, Tier 3 is hint-only.
 - **Drift-note 12**: validator scoping at `(?:^|/)\.claude/plans/[^/]+\.md$` may miss plan files at non-canonical paths (e.g., user's custom plan dir). Acceptable — toolkit convention is `~/.claude/plans/` per H.7.9 design.
-- **Drift-note 13 (NEW this phase)**: install_hooks() didn't copy validators/ subdirectory — pre-H.7.12 this meant legacy validators (no-bare-secrets, frontmatter-on-skills) only worked via plugin-load path, never via $CLAUDE_DIR. Revealed by H.7.12 smoke test failure (MODULE_NOT_FOUND on validate-plan-schema.js in test 14). Fixed inline. **Pattern**: install scripts that copy subdirectory-organized files need recursive logic; `*.js` glob only catches top-level files. Audit candidate: scan other install steps for similar single-level-glob patterns.
+- **Drift-note 13 (NEW this phase)**: `install_hooks()` didn't copy `validators/` subdirectory — pre-H.7.12 this meant legacy validators (no-bare-secrets, frontmatter-on-skills) only worked via plugin-load path, never via `$CLAUDE_DIR`. Revealed by H.7.12 smoke test failure (`MODULE_NOT_FOUND` on `validate-plan-schema.js` in test 14). Fixed inline. **Pattern**: install scripts that copy subdirectory-organized files need recursive logic; `*.js` glob only catches top-level files. Audit candidate: scan other install steps for similar single-level-glob patterns.
 
 ### Verification
 

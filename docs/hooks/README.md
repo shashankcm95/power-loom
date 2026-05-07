@@ -12,7 +12,7 @@
 - Validators: [`hooks/scripts/validators/`](../../hooks/scripts/validators/)
 - Plugin manifest: [`.claude-plugin/plugin.json`](../../.claude-plugin/plugin.json)
 
-## Hooks shipped (13)
+## Hooks shipped (14)
 
 | # | Script | Event | Phase |
 |---|--------|-------|-------|
@@ -28,6 +28,7 @@
 | 10 | `session-end-nudge.js` | Stop | H.1 baseline |
 | 11 | `session-self-improve-prompt.js` | UserPromptSubmit | H.4.1 |
 | 12 | `auto-store-enrichment.js` | Stop | H.4.1 |
-| 13 | `validators/validate-plan-schema.js` | PostToolUse | H.7.12 (NEW) — tiered plan-template enforcement; **H.7.17 (migrated PreToolUse → PostToolUse per theo's H.7.9 Section C original spec)** |
+| 13 | `validators/validate-plan-schema.js` | PostToolUse | H.7.12 (NEW) — tiered plan-template enforcement; H.7.17 (migrated PreToolUse → PostToolUse per theo's H.7.9 Section C original spec) |
+| 14 | `validators/validate-markdown-emphasis.js` | PostToolUse | **H.7.18 (NEW)** — tiered MD037-via-emphasis catcher (closes drift-note 19) |
 
 > Up: [docs/](..)
