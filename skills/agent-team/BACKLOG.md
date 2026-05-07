@@ -2,6 +2,100 @@
 
 Deferred work from prior phases, captured here so nothing important gets silently dropped. Each entry: scope, rationale, dependencies, rough estimate.
 
+## Phase H.7.16 — Substrate-meta routing detection (drift-note 9) + PostToolUse:Write investigation (drift-note 10) — SHIPPED
+
+**Status**: shipped per approved plan. Closes the two architectural/investigative drift-notes deferred from H.7.15. Architect: `04-architect.mira` (1,470-word design pass). Convergence with theo recorded as `agree`.
+
+### Drift-note 9 — substrate-meta routing catch-22
+
+**The catch-22**: when `route-decide.js` is invoked on a task that proposes modifying `route-decide.js` itself, the gate scores using the OLD dictionary. Two empirical observations this session:
+- H.7.11 task: scored `root` 0.125 (proposed dict expansion would have made it `borderline` 0.488)
+- H.7.14 task: scored `borderline` 0.488 — **but actually a different failure mode** (mira's Section D.2): borderline-tier escalation case, not substrate-meta dictionary lag. Section B token list deliberately does NOT expand to catch H.7.14.
+
+**Mira's design (Option 4)**: sentinel-keyword check + JSON flag + forcing instruction. Pure additive — no `WEIGHTS_VERSION` bump, no scoring change, no dimension addition. Respects theo's load-bearing comment at `route-decide.js:11-13`.
+
+**What landed**:
+
+- **`scripts/agent-team/route-decide.js`** (~85 LoC additive):
+  - NEW `SUBSTRATE_META_TOKENS` constant (17 tokens, 2 tiers): Tier 1 file/symbol references (`route-decide`, `route-decide.js`, `WEIGHTS_VERSION`, `weights_version`, `ROUTE_THRESHOLD`, `ROOT_THRESHOLD`); Tier 2 substrate-vocabulary phrases (`dictionary expansion`, `dict expansion`, `keyword set`, `keyword sets`, `weight refit`, `re-weight`, `reweight`, `scoring axis`, `routing axis`, `forcing instruction`, `forcing-instruction`, `signal token`, `sentinel keyword`)
+  - NEW `detectSubstrateMeta(lowerText)` function — separate detection path; uses same `buildKeywordRegex` semantics as scoring keyword matching
+  - NEW `buildMetaForcingInstruction(tokens, score, recommendation)` — emits `[ROUTE-META-UNCERTAIN]` (7th in the forcing-instruction family alongside `[ROUTE-DECISION-UNCERTAIN]` H.7.5, `[PROMPT-ENRICHMENT-GATE]` H.4.x, `[CONFIRMATION-UNCERTAIN]` H.4.3, `[FAILURE-REPEATED]` H.7.7, `[SELF-IMPROVE QUEUE]` H.4.1, `[PLAN-SCHEMA-DRIFT]` H.7.12)
+  - 3 NEW output JSON fields: `substrate_meta_detected`, `substrate_meta_tokens`, `meta_forcing_instruction` — pure additive; backward-compatible
+- **`rules/core/workflow.md`**: NEW bullet under "Route-Decision for Non-Trivial Tasks" — H.7.16 `[ROUTE-META-UNCERTAIN]` handling rule + co-firing semantics
+- **`scripts/agent-team/_h70-test.js` Section 7** (NEW): 3 tests with 5 assertions — H.7.11 retroactive (detection fires + ≥2 tokens), false-positive guard (`recommendation: 'root'` despite substrate-meta detection — counter_signals win), baseline (non-substrate-meta task → `false`)
+
+**Pure additive guarantee verified**: `WEIGHTS_VERSION` unchanged, all 6 H.7.3 calibration baselines byte-identical, recommendation logic untouched. New fields are advisory metadata only.
+
+**Recursive-dogfood property** (Probe 9): the detector catches its own design task — running `route-decide` on the H.7.16 plan task triggers `substrate_meta_detected: true` with 4 tokens.
+
+### Drift-note 10 — PostToolUse:Write empirical investigation
+
+**Test setup**: created temporary `hooks/scripts/test-postuse-write.js` (~20 LoC) logging to `/tmp/h716-postuse-test.log`; added temporary `PostToolUse:Write` matcher to `hooks/hooks.json`; ran `install.sh --hooks`; triggered Write via Claude.
+
+**Result**: log file did NOT receive an entry after the Write tool was invoked.
+
+**Honest interpretation**: Two possible explanations:
+1. Claude Code caches `hooks.json` at session start; my mid-session edit didn't take effect
+2. Claude Code does NOT dispatch `PostToolUse:Write` events globally
+
+**Cannot disambiguate from within current session**. Definitive test requires fresh Claude Code session with the modified hooks.json present at startup. Status quo (PreToolUse:Write per H.7.12) is correct conservative path regardless — even if PostToolUse:Write IS supported, migration is optional cleanup, not blocking.
+
+**Cleanup completed**: test hook deleted, hooks.json reverted, install.sh re-run to install clean state. Verified 18/18 smoke + 46/46 h70 + 0 contracts post-cleanup.
+
+**Drift-note 10 outcome**: investigated as far as possible from within session; status quo validated; deferred fresh-session-test to H.7.17 candidate. Migration of `validate-plan-schema.js` from PreToolUse:Write to PostToolUse:Write deferred conditional on positive empirical result.
+
+### Verification
+
+- ✓ Probe 1: `bash install.sh --hooks --test` → 18/18 passing (regression — H.7.16 doesn't add hook tests)
+- ✓ Probe 2: `node scripts/agent-team/contracts-validate.js` → 0 violations
+- ✓ Probe 3: `node scripts/agent-team/_h70-test.js` → **46/46 passing** (was 41/41; +5 H.7.16 substrate-meta assertions)
+- ✓ Probe 4: `node --check scripts/agent-team/route-decide.js` → syntax-ok
+- ✓ Probe 5: H.7.11-style task → `substrate_meta_detected: true`, tokens `['route-decide', 'route-decide.js', 'dict expansion']`
+- ✓ Probe 6: false-positive guard ("fix typo in route-decide.js") → `recommendation: root`, `substrate_meta_detected: true` (advisory)
+- ✓ Probe 7: 6 H.7.3 baselines byte-identical (additive-only invariant)
+- ✓ Probe 8: drift-note 10 empirical test attempted; outcome documented (inconclusive in-session; status quo validated)
+- ✓ Probe 9 (recursive-dogfood): H.7.16 task itself triggers detection (4 tokens matched)
+
+### Convergence stance recorded
+
+```
+pattern-recorder.js record \
+  --task-signature h7.16-substrate-meta-detection \
+  --persona 04-architect --identity 04-architect.mira --verdict pass \
+  --paired-with 04-architect.theo --convergence agree \
+  --tokens 70000 --file-citations 6 \
+  --kb-provenance-verified true --verification-depth full
+```
+
+mira agrees with theo's H.7.3 architecture wholesale; her design extends substrate without altering load-bearing surface. Patterns: 90 → 91.
+
+### Drift-notes captured this phase
+
+- **Drift-note 20** (mira's DN-A from her design pass): H.7.14 (toolkit-root extraction) was originally framed as substrate-meta but mira's Section D.2 finds it's actually a borderline-tier escalation case — different failure mode. Pattern: the two failure modes look similar but have different fixes. Worth distinguishing in retrospectives.
+- **Drift-note 21** (mira's DN-B): adding a 7th forcing instruction to route-decide makes the gate "mostly forcing instructions wrapping a small scorer." Current count: `[ROUTE-DECISION-UNCERTAIN]` (H.7.5) + `--force-route`/`--force-root` overrides + new `[ROUTE-META-UNCERTAIN]` (H.7.16) = 3 escape hatches around scoring. Architectural smell at 4-5; defer to future-arc retrospective.
+- **Drift-note 22** (recursive-dogfood observation): the H.7.16 detector catches its own design task. Same recursive-dogfood shape as H.7.10 dogfooding /build-plan. Pattern: substrate-meta phases naturally have this property — the work being designed IS substrate-meta.
+- **Drift-note 23** (NEW from drift-note 10 outcome): in-session hooks.json caching prevents empirical hook testing without restart. Pattern audit: any phase that needs to test hook changes empirically requires either external runner or fresh-session test convention.
+
+### Honest tradeoffs (per mira's Section E)
+
+- **Papers over the catch-22**: solving it would require running scoring under proposed-change-applied state — infeasible. Forcing-instruction is the H.7.5-family pattern's natural shape for this exact failure mode.
+- **False-positive risk**: low (Tier 1 + 2). Tier 3 explicitly deferred. Even FPs cost only ~few hundred tokens of advisory text — recommendation/score unchanged.
+- **The third-forcing-instruction smell** (drift-note 21): real, deferred to future-arc retrospective. Not blocking H.7.16.
+
+### H.7.16 follow-ups (deferred)
+
+- **H.7.17 candidate**: fresh-session test of PostToolUse:Write feasibility (definitive). If positive: optional migration of `validate-plan-schema.js`. If negative: doc the limitation in `swarm/plan-template.md`.
+- **H.7.18+ candidate** (drift-note 21): substrate-architecture retrospective — "gate as mostly forcing instructions" smell.
+- **Tier 3 substrate-meta tokens**: only add if H.7.18+ retrospective shows under-detection.
+
+### Why this is the right shape
+
+- Closes both architecture-deferred + investigation-deferred drift-notes from H.7.15 in one phase
+- Honors theo's load-bearing comment via mira's pure-additive design (no `WEIGHTS_VERSION` bump; no scoring change)
+- Recursive-dogfood property: detector catches its own design task (Probe 9)
+- Empirical investigation outcome documented honestly (inconclusive in-session; status quo validated)
+- Twentieth distinct phase shape: substrate-meta self-detection
+
 ## Phase H.7.15 — Drift-note housekeeping (mechanical fixes + process codification) — SHIPPED
 
 **Status**: shipped per approved plan. Bundle phase closing 5 of 7 truly-pending or partially-pending drift-notes from this session. Per AskUserQuestion, scoped to mechanical + process work only; architectural drift-notes 9 + 10 deferred to H.7.16 (need design / empirical investigation that doesn't fit the mechanical-fix shape).

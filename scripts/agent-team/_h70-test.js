@@ -589,6 +589,53 @@ assertEqual(
   'H.7.11 schema bump: WEIGHTS_VERSION → v1.2-dict-expanded-2026-05-07'
 );
 
+// ===== Section 7: H.7.16 substrate-meta detection (drift-note 9) =====
+//
+// Added in H.7.16 (mira, 04-architect). Verifies substrate-meta sentinel
+// detection in route-decide.js. Pure-additive metadata: detects tokens
+// that signal the task modifies route-decide itself (catch-22 case),
+// without altering score or recommendation. Co-fires safely with
+// counter_signals (false-positive guard).
+
+console.log('\n[7] H.7.16 substrate-meta detection (3 tests)');
+
+// Test 1: H.7.11 retroactive — task that proposes dict expansion in route-decide
+const metaResult1 = routeDecide.scoreTask(
+  'design dict expansion for route-decide.js to add retrospective and CRITICAL tokens'
+);
+assertEqual(
+  metaResult1.substrate_meta_detected,
+  true,
+  'H.7.16 detection: H.7.11-style dict-expansion task → substrate_meta_detected = true'
+);
+assert(
+  metaResult1.substrate_meta_tokens.length >= 2,
+  `H.7.16 detection: H.7.11-style task should match ≥2 tokens (got ${metaResult1.substrate_meta_tokens.length}: ${JSON.stringify(metaResult1.substrate_meta_tokens)})`
+);
+
+// Test 2: false-positive guard — substrate-meta tokens present but counter-signal
+// fires; recommendation should still be root (substrate_meta is advisory only,
+// does NOT alter recommendation).
+const metaResult2 = routeDecide.scoreTask('fix typo in route-decide.js');
+assertEqual(
+  metaResult2.recommendation,
+  'root',
+  'H.7.16 false-positive guard: counter-signals win; recommendation stays root despite substrate-meta detection'
+);
+assertEqual(
+  metaResult2.substrate_meta_detected,
+  true,
+  'H.7.16 false-positive guard: detection still fires (advisory) but does not alter recommendation'
+);
+
+// Test 3: baseline task with no substrate-meta language → detection false
+const metaResult3 = routeDecide.scoreTask('design pipeline orchestration with auth');
+assertEqual(
+  metaResult3.substrate_meta_detected,
+  false,
+  'H.7.16 baseline: non-substrate-meta task → substrate_meta_detected = false'
+);
+
 // ===== Summary =====
 
 console.log(`\n=== Summary ===`);
