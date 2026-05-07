@@ -73,6 +73,22 @@ function cmdRecord(args) {
     console.error('Usage: record --task-signature X --persona Y --verdict pass|partial|fail [--agent-role R] [--findings-count N] [--identity persona.name] [--skills s1,s2]');
     console.error('  H.7.0-prep optional quality factors:');
     console.error('    [--tokens N] [--file-citations N] [--cap-requests-acted N] [--cap-requests-total N] [--kb-provenance-verified true|false]');
+    console.error('  H.7.0 optional verification + complexity:');
+    console.error('    [--verification-depth full|spot|asymmetric|symmetric] [--task-complexity-override trivial|standard|compound]');
+    process.exit(1);
+  }
+  // H.7.0 — validate optional task-complexity-override flag.
+  const validBuckets = ['trivial', 'standard', 'compound'];
+  if (args['task-complexity-override'] !== undefined &&
+      !validBuckets.includes(args['task-complexity-override'])) {
+    console.error(`Invalid --task-complexity-override: ${args['task-complexity-override']}. Must be ${validBuckets.join('|')}.`);
+    process.exit(1);
+  }
+  // H.7.0 — validate optional verification-depth flag.
+  const validDepths = ['full', 'spot', 'asymmetric', 'symmetric'];
+  if (args['verification-depth'] !== undefined &&
+      !validDepths.includes(args['verification-depth'])) {
+    console.error(`Invalid --verification-depth: ${args['verification-depth']}. Must be ${validDepths.join('|')}.`);
     process.exit(1);
   }
 
@@ -118,6 +134,10 @@ function cmdRecord(args) {
       // H.7.1 — paired-with + convergence axes for the asymmetric-challenger callsite
       paired_with: pairedWith,
       convergence: convergence,
+      // H.7.0 — optional task-complexity override (architect-mira Implementation
+      // handoff §3). Bypasses route-decide bucketer when caller knows the
+      // complexity bucket directly (e.g., evaluator already classified).
+      task_complexity_override: args['task-complexity-override'] || null,
     };
     const hasAnyFactor = Object.values(qualityFactors).some((v) => v !== null);
 
@@ -151,6 +171,11 @@ function cmdRecord(args) {
           const fwdArgs = [identityScript, 'record', '--identity', args.identity, '--verdict', args.verdict];
           if (args['task-signature']) fwdArgs.push('--task', args['task-signature']);
           if (args.skills) fwdArgs.push('--skills', args.skills);
+          // H.7.0 — forward verification-depth flag to agent-identity.js so
+          // the spawnsSinceFullVerify counter mutates correctly.
+          if (args['verification-depth']) {
+            fwdArgs.push('--verification-depth', args['verification-depth']);
+          }
           // H.7.0-prep — forward quality-factors payload (only when at least
           // one axis is supplied; otherwise omit and let agent-identity.js
           // record null-axes entry).

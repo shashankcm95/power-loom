@@ -260,6 +260,90 @@ The shipped `WEIGHTS` object now carries the constant `WEIGHT_PROFILE_VERSION = 
 
 `tierOf` is unchanged (H.4.2 commitment held). The H.7.4 refit affects ONLY `computeWeightedTrustScore`'s output. `recommend-verification`, `prune`, and the verification-policy table all read `tier`, not `weighted_trust_score`, so no callsites change.
 
+## Multi-Axis Trust Signal (H.7.0)
+
+The H.7.4 refit moved one axis empirically; H.7.0 adds three new axes — one INSIDE the score formula, two OBSERVABLE-ONLY. The phase also formalizes the *composition algebra* under which axes combine, addressing a load-bearing gap surfaced during the H.7.0 architectural design pass: had the new axes composed multiplicatively with `passRate`, a single zero-valued axis (e.g., a dormant identity with `recency_decay → 0`) would have collapsed the entire trust signal to zero. This section documents the additive-bonus rule the score formula commits to, and the sample-size gate that keeps observable axes out of the score until empirical fit is possible.
+
+#### New axes added at H.7.0
+
+| Axis | Where it lives | Empirical floor | Citation / Rationale |
+|------|---------------|-----------------|----------------------|
+| `task_complexity_weighted_pass` | **In score** (+0.10 in `WEIGHTS`) | n≥1 (pure derivation; no fit needed) | Bacchelli & Bird MSR 2013 evidence-depth framework. passRate weighted by route-decide complexity bucket: `Σ(passes × bucket_weight) / Σ(total × bucket_weight)`. Bucket weights `{trivial: 0.5, standard: 1.0, compound: 1.5}` — theory-driven; refit at H.7.5+. |
+| `recency_decay_factor` | OBSERVABLE-ONLY (cmdStats output) | n≥30 per identity AND span≥30 days | Curtis et al. 1988 software-engineering memory window. Exponential decay with half-life 30 days: `decay = exp(-Δdays / 30)`. Surfaced as `cmdStats.recency_decay_factor`. NOT in score formula at H.7.0 — see "Sample-size gate per axis" below for the empirical floor argument. |
+| `qualityTrend` | OBSERVABLE-ONLY (cmdStats output) | n≥6 per identity | Windowed slope over per-axis windows: `recent_avg` (verdicts[-3:]) vs `prior_avg` (verdicts[-6:-3]); `slope_sign` ∈ `{up, down, flat}`. Used by `recommend-verification` drift trigger; not a score input. |
+
+The complexity bucketer derives buckets at aggregate-time from existing `task_signature` field (no new verdict field — see CRITICAL C-3 in H.7.0 design pass for why). The route-decide thresholds drive the bucket boundaries: `score_total < 0.30 → trivial`; `0.30 ≤ score < 0.60 → standard`; `score ≥ 0.60 → compound`.
+
+#### Composition is additive within bonus, NOT multiplicative across axes
+
+The H.7.0 design pass surfaced a load-bearing decision: the new axes contribute INTO `clamped_bonus` (additive), they do NOT multiply against `passRate` or each other (multiplicative). Composition stays:
+
+```
+score = passRate × (1 + clamped_bonus)
+clamped_bonus = clamp(Σ axis_contribution_i, -0.10, +0.50)
+```
+
+Why this matters: a multiplicative composition like `passRate × complexity × recency` has degenerate zeros. An identity at `passRate=1.0, complexity=1.0, recency=0` (last verdict 365+ days ago — exponential decay zeros) would collapse to score = 0 *despite a perfect track record*. That's not a TRUST collapse — it's a STALENESS observation, conflated.
+
+The H.4.2 commitment ("any tier assignment must be reproducible from a one-line explanation") would silently break: `"why is mira at 0?" → "she's high-passRate, but recency_decay zeroed her"`. Additive composition keeps each axis's contribution proportional to its weight; clamping caps total excursion; no axis can collapse the score by itself.
+
+#### Sample-size gate per axis
+
+The H.7.4 framework set explicit confidence floors: high (n≥30 AND |r|≥0.30), moderate (n≥15 AND |r|≥0.20), low (else), insufficient (n<5). H.7.0 honors that floor for new axes:
+
+| Axis | Floor required | Observed today | Status at H.7.0 |
+|------|---------------|----------------|-----------------|
+| `task_complexity_weighted_pass` | n≥1 (derivation, not fit) | All identities | **In score** (theory-driven weight; refit at H.7.5+) |
+| `recency_decay_factor` | n≥30 per-identity AND span≥30 days | 0 of 12 active identities (longest span: mira at 5.08d) | **Observable-only** until floor met |
+| `qualityTrend` | n≥6 per identity (windowed slope minimum) | 5 of 12 active identities | **Observable-only**; drift trigger fires for the 5 that qualify |
+
+`recency_decay_factor` could be empirically fit at n=35 today, but the per-identity time-span distribution is dominated by mira's record (5+ days vs <1 day for the other 11). Fitting the half-life coefficient now would let mira's record dominate; the coefficient would not generalize. The 30-day half-life is theory-driven from Curtis 1988 typical-memory-window; refit gated on n≥30 per-identity span≥30 days — the toolkit cannot reach that for ~30 calendar days minimum from today.
+
+`qualityTrend` requires n≥6 verdicts to compute the windowed slope (3 recent + 3 prior). Identities below the threshold have `qualityTrend: null`; the drift trigger gracefully degrades — they fall through to the existing tier-table policy unchanged.
+
+#### WEIGHT_PROFILE_VERSION bump rationale
+
+`h7.4-empirical-v1` → `h7.0-multi-axis-v1`. The bump signals to future audits that the formula scope expanded (a new axis joined the bonus computation), independent of whether existing weights changed. The H.7.4 weights are kept (file_citations_per_finding=0.135; the rest at theory). H.7.0 adds task_complexity_weighted_pass=0.10 and surfaces two observable-only axes. The new positive-weights sum is 0.585 (was 0.535); BONUS_CAP.max stays at 0.50, so cap-from-above is genuinely active for top-decile identities with all positive axes saturated.
+
+#### Drift detection / recalibration triggers
+
+`recommend-verification` gains a drift pre-check block that fires BEFORE the tier-based policy. Order is load-bearing; first match wins. Each pre-check returns a `recalibration_reason` field for audit traceability; the tier-table fall-through is unchanged from H.7.4.
+
+| Priority | Trigger | Condition | Policy |
+|----------|---------|-----------|--------|
+| 1 | `--force-full-verify` flag | Explicit user override | Full-verify (symmetric-pair) |
+| 2 | `recalibration_due` | `spawnsSinceFullVerify >= 10` | Full-verify (symmetric-pair) |
+| 3 | high-trust + task-novelty | `tier === 'high-trust'` AND task signature has NO overlap with `specializations[]` | Asymmetric-challenger (1) |
+| 4 | high-trust + qualityTrend down | `tier === 'high-trust'` AND `qualityTrend.findings_per_10k.slope_sign === 'down'` OR `qualityTrend.file_citations_per_finding.slope_sign === 'down'` | Full-verify (symmetric-pair) |
+| 5 | (fall-through) | None of the above | Existing tier-policy table |
+
+The threshold `N=10` for `recalibration_due` is theory-driven (matches `retireMinVerdicts`); refit gate at H.7.5+ once 3 high-trust identities have ≥30 verdicts each. The `qualityTrend` window is 3 (matches typical history depth; covers ~30% of an identity's record at QUALITY_FACTORS_HISTORY_CAP=50).
+
+#### Worked example (H.7.0 multi-axis)
+
+Hypothetical identity (post-H.7.0 spawn) with 6 pass / 0 partial / 0 fail and a mix of task complexities:
+
+- passRate = 1.000
+- 2 trivial passes (signature → score < 0.30) + 3 standard passes (0.30-0.60) + 1 compound pass (≥0.60)
+  - Weighted passes = 2×0.5 + 3×1.0 + 1×1.5 = 5.5
+  - Weighted total = 5.5 (all passed)
+  - `task_complexity_weighted_pass` = 5.5 / 5.5 = 1.0 → normalized 1.0 → contribution +0.10
+- file_citations_per_finding = 4.5 → normalized 0.667 → contribution +0.090
+- findings_per_10k = 1.2 → normalized 0.350 → contribution +0.035
+- convergence_agree_pct = 0.8 → normalized 0.8 → contribution +0.120
+- kb_provenance_verified_pct = 1.0 → contribution +0.100
+- cap_request_actionability = null → contribution 0
+- tokens = 80,000 → normalized 0.300 → contribution -0.015
+- bonus_sum = +0.430; not capped (within [-0.10, +0.50])
+- raw composite = 1.0 × (1 + 0.430) = 1.430 → **clamped to 1.0** by the defense-in-depth final-score clamp
+- Profile: `h7.0-multi-axis-v1`
+
+The identity's tier is determined by `tierOf` alone (passRate ≥ 0.8 over ≥5 verdicts → high-trust); the weighted score is 1.0 (clamped) — the two signals stay sibling: tier is the policy input, weighted score is the diagnostic / fine-grained ranking input.
+
+#### Forward-compat: tier-policy stability (H.7.0)
+
+`tierOf` is unchanged at `agent-identity.js:98-105` (H.4.2 commitment held; byte-for-byte invariance test ran at the H.7.0 ship boundary). The H.7.0 changes affect ONLY `computeWeightedTrustScore`'s output (one new axis joins the bonus; observable-only fields surface in cmdStats) and `recommend-verification`'s pre-check block (drift triggers preempt the tier-policy table for high-trust identities). `prune`, `assign`, the verification-policy table itself, and all existing passRate-derived behaviors are unchanged.
+
 ## Lifecycle + Evolution Vision (H.6.6 + H.7.0)
 
 Trust scoring isn't an end-state — it's an input to a longer evolution loop. The toolkit's vision is **agent breeding**: after enough iterations, the roster collapses to high-trust specialists tuned to *this user's actual workload*. Mirror of how modern chickens are bred to maximize egg-laying — selection pressure → reproduction → culling → generational specialization.
@@ -287,17 +371,55 @@ Defaults are CLI-tunable (`--retire-min-verdicts`, `--retire-pass-rate-max`, `--
 
 Skill-forge consults a canonical-source registry before generic internet research. See [skill-bootstrapping](skill-bootstrapping.md) for the bootstrap flow; this just changes the *sources* it uses.
 
-### L3 — Evolution loop (DEFERRED to H.7.0)
+### L3 — Evolution loop (SHIPPED in H.7.0)
 
-The breeding mechanism. Deliberately deferred until ≥20 real builder verdicts accumulate (n=1 today; rules would be guesswork). Pre-design constraints:
+The breeding mechanism is live. `agent-identity breed --persona X` selects a parent (highest weighted_trust_score; tie → passRate; tie → createdAt), picks a kid name (first free roster slot or `--name`), creates the kid identity with parent's traits as priors, and writes the new identity to the store. Diversity-guard + population-cap + user-gate semantics enforce the H.6.6 lifecycle commitments end-to-end.
 
-- **Lineage tracked**: each kid identity records `parent: identity-id` + `generation: parent.generation + 1`
-- **Inheritance shape**: kid gets `traits` from parent as priors (skill focus + kb focus); empty verdict record (start as unproven)
-- **Diversity preserved**: at least 1 round-robin generalist per persona kept un-bred (avoid monoculture)
-- **Triggers**: `breed --persona X` manual subcommand; later periodic; gated by user approval per skill-bootstrapping convention
-- **Population size**: kept bounded (retire offsets breed; roster doesn't grow unboundedly)
+#### Breeding mechanics (`agent-identity breed`)
 
-Until H.7.0 ships: breeding is a vision, not an implementation. L1's schema additions ensure when L3 lands, prior identity data is already L3-shaped.
+```
+agent-identity breed --persona <NN-name> [--parent <id>] [--name <kid>] [--auto]
+```
+
+Flow:
+
+1. Validate persona is in `DEFAULT_ROSTERS`.
+2. Filter live (non-retired) identities of this persona.
+3. **Diversity-guard** (refuse-if-monoculture; see below).
+4. **Population-cap** (refuse-if-full-roster; see below).
+5. Pick parent: `--parent` if supplied (must be live + same persona); else highest `computeWeightedTrustScore` (ranked by `score`; tie → `passRate`; final tie → `createdAt` ascending).
+6. Pick kid name: `--name` if supplied; else first free slot in `DEFAULT_ROSTERS[persona]` (live OR retired uses the slot).
+7. **User-gate**: if first breed for this persona AND `!args.auto`, emit `requires_confirmation: true` JSON and exit 0; subsequent calls (or `--auto` on the first call) proceed without re-prompt. State carried in `store.breedFirstPromptedFor[persona]`.
+8. Create kid: `parent: <parent-id>`, `generation: parent.generation + 1`, `traits: { ...parent.traits }` (deep-copied; parent's skill focus + kb focus inherited as priors), empty verdicts/history/specializations, `spawnsSinceFullVerify: 0` (per architect-mira note: kid is unproven; counter is per-identity, not per-lineage).
+9. `writeStore`. Output structured JSON `{ action, applied, kid, parent, generation, traits_inherited }`.
+
+#### Diversity guard + population cap
+
+**Diversity guard** (architect-mira H-2): breeding refuses when `count(persona X live identities with generation === 0) <= 1`. Rationale: every breed advances the parent into specialization-space; without at least 2 generation-0 generalists alive, the next breed would leave 0 generalists for that persona, collapsing the round-robin universe to the bred specialists' priors. Recovery actions surfaced in the error JSON: (1) add a new generation-0 name to `DEFAULT_ROSTERS`; (2) un-retire a previously-retired generation-0 identity.
+
+**Population cap** (architect-mira H-4): breeding refuses when `live.length >= rosters[persona].length`. Rationale: roster names are the universe; a full roster has no slot for a kid without retirement. Caller must `prune --auto` (retire underperforming) or extend the roster first. The cap preserves the "round-robin universe is the roster names" invariant.
+
+The two checks are independent — both must pass before breed proceeds. Together, they ensure the population is bounded (no unbounded growth) AND diverse (always at least 1 generalist remains).
+
+#### Specialization-aware assign
+
+`agent-identity assign --persona X --task <tag>` now honors specialization overlap when picking from the live roster. When at least one live identity has `specializations[]` overlap with the task tag (exact match weighted 2× substring match weighted 1×), the highest-overlap candidate is picked; ties broken by round-robin index. When no overlap exists across all candidates, falls back to round-robin (unchanged H.6.x behavior).
+
+The change is purely additive: callers that don't pass `--task` see no behavioral change. Callers that do pass `--task` get the specialization-overlap pick; the assign output now carries `pickReason: 'specialization-overlap' | 'round-robin'` for audit visibility.
+
+#### Trait inheritance
+
+Kid identities inherit `traits` from parent as priors:
+
+- `skillFocus` — string; dominant skill from parent's `skillInvocations`
+- `kbFocus` — array; deep-copied to prevent mutation aliasing
+- `taskDomain` — string; dominant task tag prefix
+
+Verdicts, history, specializations, and skill invocations all start empty. The kid is `unproven` per `tierOf` (total verdicts < 5); accumulates trust organically. The traits represent priors — what the toolkit *expects* the kid to be good at, given parental lineage — not earned reputation.
+
+When parent has `traits.skillFocus === null` (no dominant skill yet), the kid inherits the null. Today the design proceeds without refusal; revisit at H.7.5+ if observed.
+
+`spawnsSinceFullVerify` resets to 0 for the kid (drift counter is per-identity, not per-lineage). The kid is unproven; first 10 spawns will get full-verify regardless of trigger because the recalibration_due threshold is reached on the 10th spot-check. 
 
 ### Why the staged rollout
 

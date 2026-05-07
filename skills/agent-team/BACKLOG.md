@@ -2,6 +2,68 @@
 
 Deferred work from prior phases, captured here so nothing important gets silently dropped. Each entry: scope, rationale, dependencies, rough estimate.
 
+## Phase H.7.0 — Evolution loop + drift detection + multi-axis trust signal — SHIPPED
+
+**Status**: shipped via architect+builder pair-run (medium-trust × medium-trust). Closes the original H.6.6 chicken-breeding vision; bundles H.7.6 drift detection per user direction; adds 1 new score-affecting trust axis. Largest single phase ever shipped (~250 LoC code + 514 LoC tests + 210 LoC pattern doc).
+
+**Three CRITICAL pushbacks caught by mira (architect) before implementation**:
+
+- **C-1**: Multiplicative composition `composite = passRate × complexity_weight × recency_decay` had degenerate zeros. Fix: composition stays `score = passRate × (1 + clamped_bonus)`; new axes go INTO bonus loop additively.
+- **C-2**: `recency_decay` cannot be empirically fit at n=35 / time-span 5.11 days. Fix: ship as theory-driven OBSERVABLE field (30-day half-life); not score-affecting until n≥30 per-identity AND span≥30 days.
+- **C-3**: New `task_complexity` verdict field would silently shift `aggregateQualityFactors` denominator on first H.7.0-era record. Fix: derive complexity at aggregate-time from existing `task_signature` field; net schema-additive = 0.
+
+**What landed**:
+
+- `scripts/agent-team/_lib/route-decide-export.js` (NEW, 28 LoC) — re-exports `scoreTask` for in-process consumption; closes mira's `forge-skill: route-decide-as-library` capability request
+- `scripts/agent-team/route-decide.js` — refactored: `if (require.main === module)` guard + `module.exports`. CLI byte-for-byte identical
+- `scripts/agent-team/agent-identity.js` (~671 LoC additive) — `WEIGHT_PROFILE_VERSION` bump to `"h7.0-multi-axis-v1"`; `WEIGHTS` += `task_complexity_weighted_pass: 0.10`; new helpers (`bucketTaskComplexity`, `computeTaskComplexityWeightedPass`, `computeRecencyDecay`, `computeQualityTrend`); `_backfillH66Schema` → `_backfillSchema` with H.7.0 fields; `cmdRecord` accepts `--verification-depth`; `cmdRecommendVerification` drift pre-check block; `cmdAssign` specialization-aware-pick; NEW `cmdBreed` with diversity-guard + population-cap + user-gate
+- `scripts/agent-team/pattern-recorder.js` (+24 LoC) — flag propagation
+- `scripts/agent-team/_h70-test.js` (NEW, 514 LoC) — 23 inline tests
+- `skills/agent-team/patterns/agent-identity-reputation.md` (+~210 LoC) — new "Multi-Axis Trust Signal (H.7.0)" H2 section + L3 evolution-loop section flipped from DEFERRED to SHIPPED
+
+**Test results (all pass)**:
+
+- 23/23 H.7.0 unit + integration tests
+- byte-for-byte `tierOf` invariance: 31/31 active identities identical pre/post H.7.0 (H.4.2 audit-transparency commitment held)
+- route-decide CLI byte-for-byte identical pre/post refactor
+- contracts-validate: 0 violations
+- install.sh --test: 10/10 hook smoke tests pass
+
+**Cycle data (paired)**:
+
+- mira (04-architect, medium-trust): `partial` verdict (functionalFailures=0, antiPatternFailures=0, A3 acknowledgesFallback warn — acceptable); 13 findings (3 CRITICAL + 4 HIGH + 3 MEDIUM + 3 LOW); 57 file citations; ~137K tokens
+- kira (13-node-backend, medium-trust): `pass` verdict (0 failures); 6 findings; 30 file citations; ~206K tokens
+- Both paired with `--paired-with` + `--convergence agree`
+
+**Toolkit verdicts**: 79 → 86 (+7 net including test-side recordings).
+
+**`tierOf` UNCHANGED** byte-for-byte at `agent-identity.js:98-105` — H.4.2 commitment held byte-for-byte.
+
+**Trust signal evolution**:
+
+| Axis | Status | Source |
+|------|--------|--------|
+| `tierOf` (binary-cliff) | UNCHANGED | H.4.2 |
+| 6 quality factors + convergence | UNCHANGED | H.7.0-prep + H.7.4 |
+| `task_complexity_weighted_pass` | NEW (in score, +0.10) | H.7.0 |
+| `recency_decay_factor` | NEW (observable-only) | H.7.0 |
+| `qualityTrend` | NEW (observable; drives drift triggers) | H.7.0 |
+| Drift triggers (4 types) | NEW | H.7.0 (merged H.7.6) |
+| `cmdBreed` subcommand | NEW | H.7.0 |
+| Specialization-aware `cmdAssign` | NEW | H.7.0 |
+
+**H.7.0 follow-ups (deferred to H.7.5+ / H.7.6+)**:
+
+- Recency-decay score-incorporation when n≥30 per-identity AND span≥30 days (~30 calendar days minimum to reach)
+- qualityTrend axis to enter score formula (today: observable-only)
+- Cross-version tracking for route-decide ↔ agent-identity profile dependency (kira L-1)
+- Parent-tie-break test for cmdBreed (kira H-1)
+- `task_complexity_override` consumption in `computeTaskComplexityWeightedPass` (kira M-1; captured but not consumed)
+- Auto-mode breeding with population dynamics observed over ≥3 cycles
+- Drift trigger N empirical refit when 3 high-trust identities have ≥30 verdicts each
+
+**Findings doc**: `swarm/H.7.0-findings.md`
+
 ## Phase H.4.3 — Prompt-enrich-trigger intent-aware skip — SHIPPED
 
 **Status**: shipped root-direct (route-decide gate returned `root` at score 0.075 — small ~50 LoC change, pattern already established by H.7.5). Closes the user-flagged confirmation-variant gap: prompts like `"sure, go for it"`, `"go for it"`, `"yeah do it"`, `"let's go with b"` were leaking past the strict-anchored SKIP_PATTERNS regex and triggering full enrichment ceremony even though they're clearly confirmations.
