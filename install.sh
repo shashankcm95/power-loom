@@ -263,6 +263,41 @@ run_smoke_tests() {
     failed=$((failed + 1))
   fi
 
+  # Test 8 (H.4.3): prompt-enrich-trigger skips "sure, go for it"-class
+  # confirmation variants (was previously leaking past strict skip regex)
+  local h43_variant_result
+  h43_variant_result=$(echo '{"prompt":"sure, go for it"}' | node "$CLAUDE_DIR/hooks/scripts/prompt-enrich-trigger.js" 2>/dev/null)
+  if [ -z "$h43_variant_result" ]; then
+    echo "  ✓ prompt-enrich-trigger: H.4.3 confirmation-variant skip (sure, go for it)"
+    passed=$((passed + 1))
+  else
+    echo "  ✗ prompt-enrich-trigger: H.4.3 confirmation-variant LEAKED (sure, go for it)"
+    failed=$((failed + 1))
+  fi
+
+  # Test 9 (H.4.3): prompt-enrich-trigger skips standalone "go for it"
+  local h43_standalone_result
+  h43_standalone_result=$(echo '{"prompt":"go for it"}' | node "$CLAUDE_DIR/hooks/scripts/prompt-enrich-trigger.js" 2>/dev/null)
+  if [ -z "$h43_standalone_result" ]; then
+    echo "  ✓ prompt-enrich-trigger: H.4.3 standalone confirmation skip (go for it)"
+    passed=$((passed + 1))
+  else
+    echo "  ✗ prompt-enrich-trigger: H.4.3 standalone confirmation LEAKED (go for it)"
+    failed=$((failed + 1))
+  fi
+
+  # Test 10 (H.4.3): prompt-enrich-trigger emits [CONFIRMATION-UNCERTAIN]
+  # for short ambiguous prompts that fail strict skip regex
+  local h43_uncertain_result
+  h43_uncertain_result=$(echo '{"prompt":"go on"}' | node "$CLAUDE_DIR/hooks/scripts/prompt-enrich-trigger.js" 2>/dev/null)
+  if echo "$h43_uncertain_result" | grep -q 'CONFIRMATION-UNCERTAIN'; then
+    echo "  ✓ prompt-enrich-trigger: H.4.3 [CONFIRMATION-UNCERTAIN] forcing instruction"
+    passed=$((passed + 1))
+  else
+    echo "  ✗ prompt-enrich-trigger: H.4.3 [CONFIRMATION-UNCERTAIN] missing — got: ${h43_uncertain_result:0:80}"
+    failed=$((failed + 1))
+  fi
+
 
   echo ""
   echo "  Results: $passed passed, $failed failed"
