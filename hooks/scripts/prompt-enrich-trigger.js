@@ -77,6 +77,14 @@ const SKIP_PATTERNS = [
   /^\s*(please\s+)?(proceed|continue|go ahead|do it|carry on|carry on then)\s*[.!?]?\s*$/i,
   /^\s*(sounds?\s+good|looks?\s+good|lgtm|nice|perfect|great|thanks|thank\s+you|ty)\s*[.!?]?\s*$/i,
   /^\s*(no|nope|n|cancel|stop|skip|pass|nvm|never\s*mind)\s*[.!?]?\s*$/i,
+  // H.4.3: confirmation + brief continuation. Affirmation possibly followed by
+  // a confirmation-shape action phrase. Capped to confirmation-shape
+  // continuations so "yes the thing is broken" still reaches enrichment.
+  // Trailing tokens (now/please/if you can) accepted.
+  /^\s*(yes|yep|yeah|yup|sure|ok|okay|absolutely|of course|definitely|cool|nice|perfect|great|awesome|alright|got it)[\s,.!]*((let'?s\s+)?(go|do|ship|proceed|continue|carry)\s*(for it|ahead|on|it|this|that|the thing|with (it|this|that|[a-z]+))?)?(\s+(now|please|if you can))?\s*[.!?]?\s*$/i,
+  // H.4.3: standalone action-word confirmations (no leading affirmation).
+  // "go for it", "let's ship it", "make it so", "let's go with b".
+  /^\s*(go for it|do (it|that|this|the thing)|ship it|let'?s\s+(go|ship|do (it|this|that|the thing)|go with (it|this|that|[a-z]+)|ship it)|make it so|carry on(?:\s+then)?|that works|works for me)(\s+(now|please|if you can))?\s*[.!?]?\s*$/i,
   // Numeric / option selection: "1", "option 1", "(a)", "1.", "a.", etc.
   /^\s*\(?[a-z0-9]\)?\s*[.!?]?\s*$/i,
   /^\s*option\s+\(?\w\)?\s*[.!?]?\s*$/i,
@@ -213,6 +221,43 @@ function isVague(prompt) {
   return false;
 }
 
+// H.4.3: short ambiguous confirmation detector. Mirrors H.7.5's
+// [ROUTE-DECISION-UNCERTAIN] pattern: when the deterministic regex layer
+// abstains on a short prompt that has confirmation-shape signals, emit a
+// softer forcing instruction telling Claude to consult the prior turn for
+// intent (rather than the heavier full enrichment ceremony). NOT a
+// subprocess LLM call — same forcing-instruction-injection pattern as
+// [PROMPT-ENRICHMENT-GATE] / [ROUTE-DECISION-UNCERTAIN] / [SELF-IMPROVE QUEUE].
+const SOFT_CONFIRMATION_SIGNALS = /\b(yes|yep|yeah|yup|sure|ok|okay|absolutely|definitely|cool|nice|perfect|great|alright|got it|do|ship|proceed|continue|carry|go|let'?s|that)\b/i;
+
+function isShortAmbiguousConfirmation(prompt) {
+  const trimmed = prompt.trim();
+  const wordCount = trimmed.split(/\s+/).filter(Boolean).length;
+  if (wordCount === 0 || wordCount > 5) return false;
+  // Must contain at least one soft confirmation signal AND lack file paths
+  // / specific entities (those would clearly be a real request, not a
+  // confirmation).
+  if (hasFilePath(trimmed) || hasSpecificEntity(trimmed)) return false;
+  return SOFT_CONFIRMATION_SIGNALS.test(trimmed);
+}
+
+function buildConfirmationUncertainInstruction(rawPrompt) {
+  const safeSlice = rawPrompt.slice(0, 200).replace(/"/g, '\\"');
+  return `[CONFIRMATION-UNCERTAIN]
+
+This short prompt has confirmation-shape signals but didn't match strict skip regex. Before enriching, consult the PRIOR turn:
+
+- If the prior turn proposed a concrete action / recommendation, treat this prompt as approval and proceed with that action (skip enrichment).
+- If the prior turn was a question or asked the user to choose, this prompt is the answer — handle accordingly without enrichment.
+- ONLY enrich (via the standard 4-part flow) if the prior turn provided NO concrete proposal AND this prompt's intent is genuinely unclear.
+
+Raw user prompt: "${safeSlice}"
+
+This forcing instruction mirrors [ROUTE-DECISION-UNCERTAIN] (H.7.5) — the deterministic layer abstained; root makes the semantic call by reading the prior turn rather than the bare prompt.
+
+[/CONFIRMATION-UNCERTAIN]`;
+}
+
 function buildForcingInstruction(rawPrompt) {
   // Phase-C: slice BEFORE escape (avoids trailing backslash from \" at boundary)
   const safeSlice = rawPrompt.slice(0, 200).replace(/"/g, '\\"');
@@ -262,6 +307,16 @@ process.stdin.on('end', () => {
     log('classified', { vague });
 
     if (!vague) {
+      return;
+    }
+
+    // H.4.3: short ambiguous confirmation → softer forcing instruction.
+    // This catches the long tail of confirmation variants ("yeah do that",
+    // "go on then") that fail strict-regex skip but shouldn't trigger the
+    // full 4-part enrichment ceremony.
+    if (isShortAmbiguousConfirmation(userPrompt)) {
+      log('injected', { instruction: 'CONFIRMATION-UNCERTAIN' });
+      process.stdout.write(buildConfirmationUncertainInstruction(userPrompt));
       return;
     }
 
