@@ -25,8 +25,40 @@
 const fs = require('fs');
 const path = require('path');
 
-const TOOLKIT = process.env.HETS_TOOLKIT_DIR ||
-  path.join(process.env.HOME, 'Documents', 'claude-toolkit');
+// H.7.10 — path priority follows the same shape as mira's H-1 fix in
+// pre-compact-save.js: env var → cwd → walk-up from __dirname → hardcoded
+// LAST. Closes silent failure on non-author install paths (CI checkout,
+// arbitrary user install location). The hardcoded `~/Documents/claude-toolkit`
+// stays as final fallback for the author's machine.
+function findToolkitRoot() {
+  // 1. Explicit env var
+  if (process.env.HETS_TOOLKIT_DIR && fs.existsSync(process.env.HETS_TOOLKIT_DIR)) {
+    return process.env.HETS_TOOLKIT_DIR;
+  }
+  // 2. Plugin-loader env var
+  if (process.env.CLAUDE_PLUGIN_ROOT && fs.existsSync(process.env.CLAUDE_PLUGIN_ROOT)) {
+    return process.env.CLAUDE_PLUGIN_ROOT;
+  }
+  // 3. cwd if it looks like a toolkit checkout
+  const cwd = process.cwd();
+  if (fs.existsSync(path.join(cwd, 'skills', 'agent-team', 'SKILL.md'))) {
+    return cwd;
+  }
+  // 4. Walk up from __dirname looking for skills/agent-team/SKILL.md
+  let dir = __dirname;
+  for (let i = 0; i < 8; i++) {
+    if (fs.existsSync(path.join(dir, 'skills', 'agent-team', 'SKILL.md'))) {
+      return dir;
+    }
+    const parent = path.dirname(dir);
+    if (parent === dir) break;
+    dir = parent;
+  }
+  // 5. Hardcoded fallback (author's machine)
+  return path.join(process.env.HOME, 'Documents', 'claude-toolkit');
+}
+
+const TOOLKIT = findToolkitRoot();
 const PATTERNS_DIR = path.join(TOOLKIT, 'skills', 'agent-team', 'patterns');
 const CONTRACTS_DIR = path.join(TOOLKIT, 'swarm', 'personas-contracts');
 const SKILL_MD = path.join(TOOLKIT, 'skills', 'agent-team', 'SKILL.md');
@@ -250,6 +282,32 @@ validators['contract-skill-status-values'] = function () {
   // For 'available', the local skill must exist at skills/<name>/SKILL.md.
   // For 'marketplace:<x>/<y>', the file at marketplaces/<x>/<plugin>/skills/<y>/SKILL.md (or the
   // bare marketplace/<x>/skills/<y>/SKILL.md if y is a fully namespaced ref) must exist.
+  //
+  // H.7.10 — marketplace check is conditional on MARKETPLACE_BASE being
+  // populated. CI runners (and minimal user installs) don't have the
+  // knowledge-work-plugins marketplace installed; skipping the existence
+  // check there preserves repo-internal validation while not failing on
+  // an external-dependency gap. Syntax validation of `marketplace:X/Y`
+  // format ALWAYS runs — only the file-existence check is gated.
+  const marketplaceCheckEnabled = (() => {
+    try {
+      if (!fs.existsSync(MARKETPLACE_BASE)) return false;
+      // Has at least one marketplace subdir installed?
+      return fs.readdirSync(MARKETPLACE_BASE).some((d) => {
+        try {
+          return fs.statSync(path.join(MARKETPLACE_BASE, d)).isDirectory();
+        } catch { return false; }
+      });
+    } catch { return false; }
+  })();
+  if (!marketplaceCheckEnabled) {
+    // marketplace: declarations are informational soft dependencies (see
+    // contract-format.md). When no marketplaces are installed (CI, minimal
+    // user install), file-existence enforcement would produce false-positive
+    // "missing" violations for skills that aren't required for power-loom
+    // to function. Syntax validation of `marketplace:X/Y` format still runs.
+    process.stderr.write(`  ℹ contract-skill-status-values: marketplace declarations treated as informational; no marketplaces installed at ${MARKETPLACE_BASE} (this is normal in CI / minimal installs)\n`);
+  }
   const violations = [];
   for (const { name, path: fp } of listContractFiles()) {
     const c = loadJson(fp);
@@ -296,7 +354,9 @@ validators['contract-skill-status-values'] = function () {
       // Skill name in spawn prompt = `<plugin>:<skill>`; we need to extract the skill name from `skill` (e.g., "engineering:debug" → "debug")
       const skillBase = skill.includes(':') ? skill.split(':')[1] : skill;
       const expectedPath = path.join(MARKETPLACE_BASE, marketplace, plugin, 'skills', skillBase, 'SKILL.md');
-      if (!fs.existsSync(expectedPath)) {
+      // H.7.10 — skip file-existence check when no marketplaces installed
+      // (CI / minimal-install case). Syntax was validated above.
+      if (marketplaceCheckEnabled && !fs.existsSync(expectedPath)) {
         violations.push({
           kind: 'marketplace-skill-missing',
           contract: name,
