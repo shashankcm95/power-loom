@@ -32,7 +32,7 @@ Deferred work from prior phases, captured here so nothing important gets silentl
 - **`pattern-runner.js`**: `PATTERNS_BASE` derived via helper; preserves `HETS_PATTERNS_DIR` primary fallback
 - **`agent-identity.js:_readPersonaContract`**: inline `contractsBase` now derived via helper; preserves `HETS_CONTRACTS_DIR` primary fallback
 
-**All 5 callers preserve their HETS_X_DIR env-var override as primary fallback** — only the second fallback (was hardcoded path) now uses the helper.
+**All 5 callers preserve their `HETS_X_DIR` env-var override as primary fallback** — only the second fallback (was hardcoded path) now uses the helper.
 
 ### Verification
 
