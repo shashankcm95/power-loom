@@ -1,8 +1,11 @@
 #!/usr/bin/env node
 
 // Pattern recorder — appends agent execution patterns to
-// ~/.claude/agent-patterns.json so the self-improvement loop can learn
-// which agent approaches succeed and which fail.
+// ~/.claude/agent-patterns.json (or wherever `HETS_PATTERNS_PATH` env var
+// points) so the self-improvement loop can learn which agent approaches
+// succeed and which fail. CS-13: env-var override enables IRL test runs
+// to write to a separate store, preventing user-task contamination of
+// toolkit-meta trust-formula state.
 //
 // Subcommands:
 //   record — append a new execution result
@@ -14,7 +17,11 @@ const path = require('path');
 const os = require('os');
 const { acquireLock: sharedAcquireLock, releaseLock: sharedReleaseLock } = require('./_lib/lock');
 
-const STORE_PATH = path.join(os.homedir(), '.claude', 'agent-patterns.json');
+// CS-13: env-var override for IRL test isolation. Default keeps prior
+// behavior (~/.claude/agent-patterns.json). Mirrors the env-var-with-default
+// precedent established in _lib/runState.js (HETS_RUN_STATE_DIR).
+const STORE_PATH = process.env.HETS_PATTERNS_PATH ||
+  path.join(os.homedir(), '.claude', 'agent-patterns.json');
 const LOCK_PATH = STORE_PATH + '.lock';
 const LOCK_TIMEOUT_MS = 3000;
 const MAX_PATTERNS = 1000; // LRU cap
