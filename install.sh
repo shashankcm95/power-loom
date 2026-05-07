@@ -435,6 +435,43 @@ run_smoke_tests() {
     failed=$((failed + 1))
   fi
 
+  # Test 19 (H.7.18): markdown emphasis validator — Tier 1 cluster fires forcing instruction
+  # 2+ unbackticked underscore-bearing tokens in same paragraph → [MARKDOWN-EMPHASIS-DRIFT]
+  local h7_18_tier1_json='{"tool_name":"Write","tool_input":{"file_path":"/tmp/emphasis-test.md","content":"# Title\n\nThis paragraph mentions HETS_TOOLKIT_DIR and CLAUDE_PLUGIN_ROOT outside backticks.\n"}}'
+  local h7_18_tier1_result
+  h7_18_tier1_result=$(printf '%s' "$h7_18_tier1_json" | node "$CLAUDE_DIR/hooks/scripts/validators/validate-markdown-emphasis.js" 2>&1)
+  if echo "$h7_18_tier1_result" | grep -q '\[MARKDOWN-EMPHASIS-DRIFT\]' && echo "$h7_18_tier1_result" | grep -q 'HETS_TOOLKIT_DIR'; then
+    echo "  ✓ validate-markdown-emphasis: H.7.18 Tier 1 cluster fires [MARKDOWN-EMPHASIS-DRIFT]"
+    passed=$((passed + 1))
+  else
+    echo "  ✗ validate-markdown-emphasis: H.7.18 Tier 1 cluster should fire forcing instruction"
+    failed=$((failed + 1))
+  fi
+
+  # Test 20 (H.7.18): same tokens backticked → silent (no false positive)
+  local h7_18_clean_json='{"tool_name":"Write","tool_input":{"file_path":"/tmp/emphasis-clean.md","content":"# Title\n\nThis paragraph mentions `HETS_TOOLKIT_DIR` and `CLAUDE_PLUGIN_ROOT` properly backticked.\n"}}'
+  local h7_18_clean_result
+  h7_18_clean_result=$(printf '%s' "$h7_18_clean_json" | node "$CLAUDE_DIR/hooks/scripts/validators/validate-markdown-emphasis.js" 2>&1)
+  if echo "$h7_18_clean_result" | grep -q 'MARKDOWN-EMPHASIS-DRIFT'; then
+    echo "  ✗ validate-markdown-emphasis: H.7.18 backticked tokens should NOT fire (false positive)"
+    failed=$((failed + 1))
+  else
+    echo "  ✓ validate-markdown-emphasis: H.7.18 backticked tokens stay silent (no false positive)"
+    passed=$((passed + 1))
+  fi
+
+  # Test 21 (H.7.18): non-.md path → silent (path filter)
+  local h7_18_nonmd_json='{"tool_name":"Write","tool_input":{"file_path":"/tmp/test.json","content":"HETS_TOOLKIT_DIR and CLAUDE_PLUGIN_ROOT"}}'
+  local h7_18_nonmd_result
+  h7_18_nonmd_result=$(printf '%s' "$h7_18_nonmd_json" | node "$CLAUDE_DIR/hooks/scripts/validators/validate-markdown-emphasis.js" 2>&1)
+  if echo "$h7_18_nonmd_result" | grep -q 'MARKDOWN-EMPHASIS-DRIFT'; then
+    echo "  ✗ validate-markdown-emphasis: H.7.18 non-.md path should be silent (path filter)"
+    failed=$((failed + 1))
+  else
+    echo "  ✓ validate-markdown-emphasis: H.7.18 non-.md path stays silent (path filter excludes)"
+    passed=$((passed + 1))
+  fi
+
 
   echo ""
   echo "  Results: $passed passed, $failed failed"

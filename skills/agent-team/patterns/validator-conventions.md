@@ -120,12 +120,43 @@ Convention A defines WHEN a validator should skip a check; Convention B defines 
 - Tell users why they did or didn't fire (Convention B)
 - Build operator trust through clear behavior
 
+## Convention C — Tiered enforcement matches actual writing variance (H.7.18 reinforcement)
+
+Originated in H.7.12 (`validate-plan-schema.js`); reinforced in H.7.18 (`validate-markdown-emphasis.js`).
+
+When the validator's universe (e.g., "all markdown files" or "all plan files") is heterogeneous in author/intent, **single-strict-tier enforcement causes false positives** that erode trust. The fix is tiered enforcement: separate "definitely a problem" from "style suggestion" from "informational hint" so the validator's noise level matches the user's risk tolerance.
+
+### Reference implementations
+
+`validate-plan-schema.js` (H.7.12 + H.7.17):
+- **Tier 1 (mandatory)**: Context, Verification Probes, (Files To Modify OR Phases) — missing → forcing instruction
+- **Tier 2 (conditional)**: Routing Decision, HETS Spawn Plan — fires only if "Routing Decision" string detected (signals new-style plan)
+- **Tier 3 (aspirational)**: Out of Scope, Drift Notes — stderr informational only
+
+`validate-markdown-emphasis.js` (H.7.18):
+- **Tier 1 (likely-MD037-triggering)**: 2+ unbackticked underscore-bearing tokens in same paragraph → forcing instruction
+- **Tier 2 (style suggestion)**: 1 isolated unbackticked token → stderr informational only
+
+### When this convention applies
+
+Apply when:
+- Validator detects shapes that range from "definitely a CI failure" to "style preference"
+- False-positive cost > miss cost (e.g., over-firing on prose mentions of `_underscore` is worse than missing one stale doc)
+- The ratio of "high-risk" to "low-risk" matches in real usage warrants graduated response
+
+### Failure modes if violated
+
+- **Single-strict-tier**: validator over-fires on edge cases; users disable or bypass
+- **Single-loose-tier**: real bugs get treated as "advisory"; CI catches them later at higher cost
+- **Tier explosion**: more than 3 tiers creates ambiguity ("is Tier 4 worse than Tier 2?"); cap at 2-3
+
 ## Related Patterns
 
 - [Route-Decision](route-decision.md) — also gates substantive work on environmental signals (the dictionary expansion v1.2 was about the gate being too aggressive in some cases; Convention A is the same lesson applied to validators)
 - [Structural Code Review](structural-code-review.md) — the third leg of triple-contract verification; validators in this family follow the same separation-of-concerns principle
 - [KB-Scope Enforcement](kb-scope-enforcement.md) — also distinguishes "did the actor read its declared scope?" (internal) from "are external KB sources fresh?" (environmental)
+- [Plan-Mode HETS Injection](plan-mode-hets-injection.md) — Convention C originated in this pattern's enforcement layer (H.7.12 tiered plan template)
 
 ## Phase
 
-Shipped: H.7.15
+Shipped: H.7.15 (Conventions A + B); reinforced H.7.18 (Convention C)
