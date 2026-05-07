@@ -600,8 +600,12 @@ function cmdInit() {
 function _readPersonaContract(persona) {
   const fs = require('fs');
   const path = require('path');
+  // H.7.14 — second fallback now uses shared `findToolkitRoot()` helper
+  // instead of hardcoded `~/Documents/claude-toolkit/`. Env override
+  // (HETS_CONTRACTS_DIR) preserved as primary fallback.
+  const { findToolkitRoot } = require('./_lib/toolkit-root');
   const contractsBase = process.env.HETS_CONTRACTS_DIR ||
-    path.join(process.env.HOME, 'Documents', 'claude-toolkit', 'swarm', 'personas-contracts');
+    path.join(findToolkitRoot(), 'swarm', 'personas-contracts');
   const fp = path.join(contractsBase, `${persona}.contract.json`);
   try { return JSON.parse(fs.readFileSync(fp, 'utf8')); } catch { return null; }
 }

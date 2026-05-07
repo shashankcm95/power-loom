@@ -2,6 +2,73 @@
 
 Deferred work from prior phases, captured here so nothing important gets silently dropped. Each entry: scope, rationale, dependencies, rough estimate.
 
+## Phase H.7.14 — Drift-note 6 audit: extract canonical findToolkitRoot helper across substrate — SHIPPED
+
+**Status**: shipped per approved plan. Closes drift-note 6 from this session (*"Multiple substrate scripts have the same hardcoded-toolkit-path anti-pattern. Mira flagged it in pre-compact-save.js (H-1). contracts-validate.js had it too. Audit candidate: scan all `scripts/agent-team/` for hardcoded `~/Documents/claude-toolkit` paths and apply the canonical findToolkitRoot() helper across the family."*)
+
+### Audit results
+
+5 substrate scripts had only env-var → hardcoded fallback (missing cwd + walk-up branches that mira's H-1 fix established):
+
+| File | Constant | Env override |
+|------|----------|--------------|
+| `scripts/agent-team/_lib/runState.js` | `RUN_STATE_BASE` | `HETS_RUN_STATE_DIR` |
+| `scripts/agent-team/kb-resolver.js` | `KB_BASE` | `HETS_KB_DIR` |
+| `scripts/agent-team/budget-tracker.js` | `CONTRACTS_BASE` | `HETS_CONTRACTS_DIR` |
+| `scripts/agent-team/pattern-runner.js` | `PATTERNS_BASE` | `HETS_PATTERNS_DIR` |
+| `scripts/agent-team/agent-identity.js:_readPersonaContract` | inline `contractsBase` | `HETS_CONTRACTS_DIR` |
+
+**Already fixed in H.7.10** (have full priority chain via inline copies):
+- `hooks/scripts/pre-compact-save.js` (uses `walkUpForRunState`)
+- `scripts/agent-team/contracts-validate.js` (uses inline `findToolkitRoot`)
+
+### What landed
+
+- **NEW `scripts/agent-team/_lib/toolkit-root.js`** (~88 LoC) — single canonical `findToolkitRoot()` helper extracted from contracts-validate.js's H.7.10 inline copy. Exports `findToolkitRoot()` function + cached `TOOLKIT_ROOT` constant. Full priority chain (HETS_TOOLKIT_DIR → CLAUDE_PLUGIN_ROOT → cwd-with-sentinel → walk-up-8-deep → hardcoded LAST). JSDoc'd per H.7.13 convention. Header comment matches H.5.5 runState.js / H.3.2 lock.js extraction-history style.
+- **`contracts-validate.js`**: replaced inline 30-LoC `findToolkitRoot()` with single `require('./_lib/toolkit-root')` — net LoC reduction
+- **`_lib/runState.js`**: `RUN_STATE_BASE` derived via `findToolkitRoot()` instead of hardcoded path
+- **`kb-resolver.js`**: `KB_BASE` derived via helper; preserves `HETS_KB_DIR` primary fallback
+- **`budget-tracker.js`**: `CONTRACTS_BASE` derived via helper; preserves `HETS_CONTRACTS_DIR` primary fallback
+- **`pattern-runner.js`**: `PATTERNS_BASE` derived via helper; preserves `HETS_PATTERNS_DIR` primary fallback
+- **`agent-identity.js:_readPersonaContract`**: inline `contractsBase` now derived via helper; preserves `HETS_CONTRACTS_DIR` primary fallback
+
+**All 5 callers preserve their `HETS_X_DIR` env-var override as primary fallback** — only the second fallback (was hardcoded path) now uses the helper.
+
+### Verification
+
+- ✓ Probe 1: `bash install.sh --hooks --test` → 17/17 passing (refactor regression)
+- ✓ Probe 2: `node scripts/agent-team/contracts-validate.js` → 0 violations
+- ✓ Probe 3: `node scripts/agent-team/_h70-test.js` → 41/41 passing
+- ✓ Probe 4: `node --check` on 7 .js files → syntax-ok
+- ✓ Probe 5: `findToolkitRoot()` returns canonical path on author's machine
+- ✓ Probe 6 (load-bearing): CI-environment simulation — `cd /tmp && node /path/scripts/agent-team/budget-tracker.js` works correctly (walk-up branch fires from script's `__dirname` heritage); `cd /tmp && node -e ".../findToolkitRoot()"` with HETS_TOOLKIT_DIR + CLAUDE_PLUGIN_ROOT cleared still resolves correctly via walk-up
+- ✓ Probe 7: grep-clean — 0 `'Documents'` literal references in all 6 fixed files
+
+### Drift-notes captured
+
+- **Drift-note 16**: audit revealed `_lib/runState.js` ALSO had the hardcoded path issue — wasn't in initial 4-file estimate (count was 5, not 4). Pattern: when auditing for an anti-pattern, grep should include `_lib/` directory explicitly; the helper modules aren't immune to the same drift they were extracted to prevent.
+- **Drift-note 17**: route-decide v1.2 correctly identified this as `borderline` 0.488 (audit_binary fired on `audit`, was missed in v1.1). Empirical confirmation H.7.11 expansion is paying off — second-time the dict expansion has correctly classified substrate-meta work this session (first was H.7.13 polish work).
+
+### Honest tradeoffs
+
+- **Behavior-preserving on author's machine**: hardcoded fallback still fires when nothing else matches (last-resort branch in helper)
+- **Behavior-improving on non-author installs**: cwd + walk-up branches now work for all 5 scripts (previously they silently fell back to the wrong hardcoded path)
+- **Net LoC reduction**: extracted 30+ LoC of inline copies into 88 LoC shared module + 6 require statements
+- **`pre-compact-save.js` not refactored**: its `walkUpForRunState()` uses different sentinel (`swarm/run-state` vs `skills/agent-team/SKILL.md`); deferred to avoid scope creep
+
+### H.7.14 follow-ups (deferred)
+
+- **`pre-compact-save.js` unification**: walkUpForRunState could merge with findToolkitRoot if sentinel logic unified. Defer.
+- **Documentation files**: 38 `.md` files reference `Documents/claude-toolkit` as canonical install path; correct as-is.
+- **Other install-step subdir-glob bugs (drift-note 13)**: separate audit candidate.
+
+### Why this is the right shape
+
+- Closes drift-note 6 with the canonical `_lib/` extraction pattern (parallel to H.3.2 lock.js + H.5.5 runState.js + H.5.4 file-path-pattern.js)
+- DRY: 5 places → 1 helper. Future hardcoded-path drift prevented by the shared module.
+- Net LoC reduction (extract 30+ LoC inline copies into 88 LoC shared module + 6 require statements)
+- Eighteenth distinct phase shape: shared-primitive extraction across substrate family
+
 ## Phase H.7.13 — Agent discipline + JSDoc polish (closes H.7.7 deferral) — SHIPPED
 
 **Status**: shipped per approved plan. Closes the longest-deferred BACKLOG item: H.7.7 line 65 ("JSDoc on hook scripts — marginal ROI; defer to a future code-quality phase or to H.7.10 agent-discipline pass"). Was originally H.7.11 in BACKLOG before pivoted to dict expansion (which had stronger empirical motivation from drift-notes 1+4); now back to original scope as H.7.13 in the renumbered map.

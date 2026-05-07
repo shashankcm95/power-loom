@@ -30,8 +30,12 @@ const path = require('path');
 const crypto = require('crypto');
 const { withLock } = require('./_lib/lock'); // H.3.2 (CS-1 code-reviewer X-3)
 
+// H.7.14 — `KB_BASE` second fallback now uses shared `findToolkitRoot()` helper
+// (from `_lib/toolkit-root.js`) instead of hardcoded `~/Documents/claude-toolkit/`.
+// Env override (HETS_KB_DIR) preserved as primary fallback.
+const { findToolkitRoot } = require('./_lib/toolkit-root');
 const KB_BASE = process.env.HETS_KB_DIR ||
-  path.join(process.env.HOME, 'Documents', 'claude-toolkit', 'skills', 'agent-team', 'kb');
+  path.join(findToolkitRoot(), 'skills', 'agent-team', 'kb');
 const MANIFEST_PATH = path.join(KB_BASE, 'manifest.json');
 // H.5.5 (CS-2/CS-3 theo HIGH): single-source RUN_STATE_BASE via _lib/runState.
 const { runStateDir } = require('./_lib/runState');
