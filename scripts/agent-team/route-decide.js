@@ -159,6 +159,110 @@ const KEYWORDS = {
   ],
 };
 
+// H.7.16 (drift-note 9, mira architect pass) — substrate-meta token sentinel.
+// SEPARATE from KEYWORDS — these tokens do NOT contribute to scoring; they
+// only feed the [ROUTE-META-UNCERTAIN] forcing instruction.
+//
+// The catch-22: when route-decide is invoked on a task that proposes modifying
+// route-decide itself (dictionary expansion, weight refit, threshold change),
+// the gate scores using the OLD dictionary. The proposed-but-not-yet-shipped
+// tokens won't be in that dictionary; the score comes back lower than it
+// would post-change. Two empirical observations this session:
+//   - H.7.11 task: scored root 0.125 confidence 0.625 (proposed dict expansion
+//     would have made it borderline 0.488). Required theo's load-bearing
+//     comment to force architect spawn.
+//   - H.7.14 task: scored borderline 0.488 (post-H.7.11 dict caught 'audit').
+//     Pre-H.7.11 it would have been root 0.225. (Mira note: actually a
+//     different failure mode — borderline-tier escalation, not substrate-meta.
+//     See drift-note 20.)
+//
+// Detection is parallel infrastructure: separate sentinel array, separate
+// detection function, separate forcing-instruction emission. Score and
+// recommendation are unchanged. Mirrors the H.7.5 forcing-instruction-injection
+// pattern: substrate detects deterministically; Claude makes the semantic call.
+//
+// Tier 1: file/symbol references — high precision, near-zero FP risk
+// Tier 2: substrate-vocabulary phrases — high precision
+// Tier 3: workflow names — medium precision (deferred per FP risk)
+const SUBSTRATE_META_TOKENS = [
+  // Tier 1
+  'route-decide', 'route-decide.js',
+  'weights_version', 'WEIGHTS_VERSION',
+  'ROUTE_THRESHOLD', 'ROOT_THRESHOLD',
+  // Tier 2
+  'dictionary expansion', 'dict expansion',
+  'keyword set', 'keyword sets',
+  'weight refit', 're-weight', 'reweight',
+  'scoring axis', 'routing axis',
+  'forcing instruction', 'forcing-instruction',
+  'signal token', 'sentinel keyword',
+];
+
+/**
+ * H.7.16 (drift-note 9) — detect substrate-meta tokens in the task text.
+ * SEPARATE from the regular keyword-matching used in scoring; this is a
+ * sentinel check that runs parallel to scoring and feeds the
+ * [ROUTE-META-UNCERTAIN] forcing instruction. Does NOT alter score or
+ * recommendation.
+ *
+ * Token matching uses the same word-boundary semantics as `matchKeywords`
+ * (case-insensitive; non-letter/digit/underscore boundary on both sides
+ * for hyphenated tokens). Tokens with spaces (e.g., "dict expansion")
+ * match as substrings on word boundaries.
+ *
+ * @param {string} lowerText Task text already lowercased
+ * @returns {{detected: boolean, tokens: string[]}} Detection result
+ */
+function detectSubstrateMeta(lowerText) {
+  const matched = [];
+  for (const token of SUBSTRATE_META_TOKENS) {
+    const re = buildKeywordRegex(token);
+    if (re.test(lowerText)) matched.push(token);
+  }
+  return { detected: matched.length > 0, tokens: matched };
+}
+
+/**
+ * H.7.16 (drift-note 9, mira Section C) — build the [ROUTE-META-UNCERTAIN]
+ * forcing instruction. 7th in the family alongside [ROUTE-DECISION-UNCERTAIN]
+ * (H.7.5), [PROMPT-ENRICHMENT-GATE] (H.4.x), [CONFIRMATION-UNCERTAIN] (H.4.3),
+ * [FAILURE-REPEATED] (H.7.7), [SELF-IMPROVE QUEUE] (H.4.1), [PLAN-SCHEMA-DRIFT]
+ * (H.7.12). Co-fires with [ROUTE-DECISION-UNCERTAIN] when both conditions hold.
+ *
+ * @param {string[]} tokens Substrate-meta tokens detected in the task
+ * @param {number} score Total score (for context in the instruction)
+ * @param {string} recommendation Current recommendation (for context)
+ * @returns {string} Forcing instruction text suitable for stdout injection
+ */
+function buildMetaForcingInstruction(tokens, score, recommendation) {
+  return `[ROUTE-META-UNCERTAIN]
+This task references substrate-meta tokens (route-decide, weights, dict
+expansion, etc.). When the proposed change modifies the routing scorer
+itself, the score above was computed using the CURRENT dictionary — which
+may not yet contain the tokens the proposed change would add. This is the
+substrate-meta routing catch-22 (drift-note 9, fixed by H.7.16 detection).
+
+Detected substrate-meta tokens: ${tokens.join(', ')}
+Score: ${score} (recommendation: ${recommendation})
+
+Before trusting the recommendation:
+- If the proposed change would add tokens that this task already mentions,
+  the post-change score would be HIGHER than what's reported above
+- The recommendation may be one tier low (root → borderline, or
+  borderline → route)
+
+Recommended actions:
+- If task is genuinely architect-shaped, supply --force-route or spawn
+  architect (per route-decide.js:11-13 load-bearing comment)
+- If task is mechanical implementation of an already-decided design,
+  current recommendation likely correct — proceed
+- If unsure, surface this instruction to the user
+
+See rules/core/workflow.md "Substrate-meta routing" for catch-22 rationale
+and H.7.16 design for context.
+[/ROUTE-META-UNCERTAIN]`;
+}
+
 // ---------- arg parsing (verbatim from contracts-validate.js:354-365) ----------
 
 function parseArgs(argv) {
@@ -500,6 +604,16 @@ function scoreTask(task, scoreArgs) {
     weights_version: WEIGHTS_VERSION,
     thresholds: { route: ROUTE_THRESHOLD, root: ROOT_THRESHOLD },
   };
+  // H.7.16 (drift-note 9) — substrate-meta detection. Pure additive: runs
+  // AFTER scoring/recommendation; does NOT alter score or recommendation.
+  // Three new output fields. Backward-compatible (existing JSON consumers
+  // ignore unknown fields).
+  const metaResult = detectSubstrateMeta(lowerText);
+  out.substrate_meta_detected = metaResult.detected;
+  out.substrate_meta_tokens = metaResult.tokens;
+  out.meta_forcing_instruction = metaResult.detected
+    ? buildMetaForcingInstruction(metaResult.tokens, out.score_total, out.recommendation)
+    : null;
   return out;
 }
 
