@@ -2,9 +2,8 @@ node_modules/
 .DS_Store
 *.log
 
-# MemPalace per-project files (issue #185)
-mempalace.yaml
-entities.json
-
 # Swarm run state (per-run findings, not for version control)
 swarm/run-state/
+
+# Note: mempalace.yaml and entities.json ARE tracked — they ship as default
+# rooms/people for the toolkit. Per-project users can override locally.
