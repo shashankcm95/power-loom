@@ -142,11 +142,20 @@ function ensureIdentity(store, persona, name) {
   return store.identities[id];
 }
 
-// H.6.6 — Backfill function: when reading the store, inject default values
-// for new H.6.6 fields on identities that pre-date this schema. Keeps
+// Backfill function: when reading the store, inject default values for fields
+// added in later schema phases on identities that pre-date them. Keeps
 // lifecycle/evolution logic safe to invoke against legacy records without
 // requiring a one-shot migration script.
-function _backfillH66Schema(identity) {
+//
+// Phase tags (most recent first):
+//   H.7.0 — spawnsSinceFullVerify, lastFullVerifyAt (drift-detection counter)
+//   H.6.6 — retired/retiredAt/retiredReason, parent, generation, traits
+//   H.7.0-prep — quality_factors_history
+//
+// Renamed in H.7.0 from _backfillH66Schema → _backfillSchema (architect-mira
+// MEDIUM M-3): phase-tag the FIELDS not the function so future phases extend
+// without further renames.
+function _backfillSchema(identity) {
   if (identity.retired === undefined) identity.retired = false;
   if (identity.retiredAt === undefined) identity.retiredAt = null;
   if (identity.retiredReason === undefined) identity.retiredReason = null;
@@ -159,6 +168,12 @@ function _backfillH66Schema(identity) {
   if (!Array.isArray(identity.quality_factors_history)) {
     identity.quality_factors_history = [];
   }
+  // H.7.0 — drift-detection counters per architect-mira M-2 / Decision 7.
+  // spawnsSinceFullVerify resets to 0 on each full-verify; counts spot-checks
+  // since last full. lastFullVerifyAt is ISO timestamp of last full verify
+  // (used for diagnostic surfacing in cmdStats).
+  if (identity.spawnsSinceFullVerify === undefined) identity.spawnsSinceFullVerify = 0;
+  if (identity.lastFullVerifyAt === undefined) identity.lastFullVerifyAt = null;
   return identity;
 }
 
@@ -196,6 +211,175 @@ function aggregateQualityFactors(history) {
   return out;
 }
 
+// H.7.0 — task-complexity bucketer. Wraps route-decide.scoreTask to map a
+// task signature string to a 3-bucket categorization. Architect-mira
+// Decision 2 thresholds (cited from route-decide.js published ROUTE_THRESHOLD
+// 0.60 and ROOT_THRESHOLD 0.30):
+//   trivial:  score_total < 0.30 (== ROOT_THRESHOLD)
+//   standard: 0.30 ≤ score_total < 0.60
+//   compound: score_total ≥ 0.60 (== ROUTE_THRESHOLD)
+//
+// Pure deterministic function; falls back to 'standard' when taskSignature is
+// null/empty or scoreTask throws (defensive — matches the conservative-default
+// pattern at route-decide.js:354 lowSignal handling).
+//
+// route-decide-export is required lazily so unit tests that don't exercise
+// task-complexity logic don't pay the import cost.
+let _routeDecideExportCache = null;
+function _getRouteDecide() {
+  if (_routeDecideExportCache === null) {
+    try {
+      _routeDecideExportCache = require('./_lib/route-decide-export.js');
+    } catch (e) {
+      // If the export module is unavailable (deployment edge case), the
+      // bucketer falls back to 'standard' — graceful-degrade, not crash.
+      _routeDecideExportCache = false;
+    }
+  }
+  return _routeDecideExportCache;
+}
+
+function bucketTaskComplexity(taskSignature) {
+  if (taskSignature === null || taskSignature === undefined ||
+      typeof taskSignature !== 'string' || taskSignature.trim().length === 0) {
+    return 'standard';
+  }
+  const re = _getRouteDecide();
+  if (!re || typeof re.scoreTask !== 'function') return 'standard';
+  let result;
+  try {
+    result = re.scoreTask(taskSignature);
+  } catch {
+    return 'standard';
+  }
+  if (!result || typeof result.score_total !== 'number') return 'standard';
+  const score = result.score_total;
+  if (score < 0.30) return 'trivial';
+  if (score < 0.60) return 'standard';
+  return 'compound';
+}
+
+// H.7.0 — task-complexity-weighted passRate. Architect-mira H-1 formula:
+//   Σ(passes_in_bucket × bucket_weight) / Σ(total_in_bucket × bucket_weight)
+//
+// Bucket weights are theory-driven (will be refit at H.7.5+ with n≥30):
+//   trivial:  0.5  (under-counts trivial passes; we want hard passes more)
+//   standard: 1.0  (neutral)
+//   compound: 1.5  (over-counts compound passes; rewards specialists)
+//
+// Returns null when history is empty. partial verdicts contribute 0 to the
+// pass-numerator (matching tierOf semantics) but 1 to the total-denominator.
+const TASK_COMPLEXITY_BUCKET_WEIGHTS = Object.freeze({
+  trivial: 0.5,
+  standard: 1.0,
+  compound: 1.5,
+});
+
+function computeTaskComplexityWeightedPass(history) {
+  if (!Array.isArray(history) || history.length === 0) return null;
+  let weightedPasses = 0;
+  let weightedTotal = 0;
+  for (const entry of history) {
+    if (!entry || typeof entry !== 'object') continue;
+    const bucket = bucketTaskComplexity(entry.task_signature);
+    const w = TASK_COMPLEXITY_BUCKET_WEIGHTS[bucket];
+    if (typeof w !== 'number') continue;
+    weightedTotal += w;
+    if (entry.verdict === 'pass') weightedPasses += w;
+  }
+  if (weightedTotal === 0) return null;
+  return weightedPasses / weightedTotal;
+}
+
+// H.7.0 — recency decay factor. Architect-mira CRITICAL C-2: OBSERVABLE only
+// at this phase; does NOT enter the score formula until n≥30 per-identity
+// verdicts span ≥30 calendar days (currently 0 of 12 active identities meet
+// this — would be dominated by mira's 5-day record).
+//
+// Theory-driven exponential decay with half-life 30 calendar days:
+//   decay_per_verdict = exp(-Δdays / 30)
+// Returns the weighted-mean recency factor over the history; weights all
+// verdicts equally. Result ∈ (0, 1]. Returns null when history is empty or
+// when no entries have a valid timestamp.
+//
+// Cite: Curtis et al. 1988 typical software-engineering memory-window
+// (theory-driven; refit gate is H.7.5+ once data permits).
+const RECENCY_HALF_LIFE_DAYS = 30;
+
+function computeRecencyDecay(history) {
+  if (!Array.isArray(history) || history.length === 0) return null;
+  const now = Date.now();
+  const factors = [];
+  for (const entry of history) {
+    if (!entry || typeof entry.ts !== 'string') continue;
+    const t = Date.parse(entry.ts);
+    if (!Number.isFinite(t)) continue;
+    const dDays = Math.max(0, (now - t) / (1000 * 60 * 60 * 24));
+    factors.push(Math.exp(-dDays / RECENCY_HALF_LIFE_DAYS));
+  }
+  if (factors.length === 0) return null;
+  return factors.reduce((a, b) => a + b, 0) / factors.length;
+}
+
+// H.7.0 — quality trend (windowed slope). Architect-mira M-1 schema:
+//   {
+//     window: 3,
+//     findings_per_10k: { recent_avg, prior_avg, slope_sign },
+//     file_citations_per_finding: { recent_avg, prior_avg, slope_sign },
+//   }
+// recent_avg = mean over verdicts[-3:]; prior_avg = mean over verdicts[-6:-3];
+// slope_sign = 'up' | 'down' | 'flat' (flat when |recent - prior| < 5% × |prior|).
+//
+// Returns null when n<6 (insufficient sample for windowed slope).
+// OBSERVABLE only at H.7.0; consumed by cmdRecommendVerification's drift
+// pre-check to fire 'quality-trend-down' on high-trust identities.
+const QUALITY_TREND_WINDOW = 3;
+const QUALITY_TREND_FLAT_THRESHOLD_PCT = 0.05;
+
+function _windowedAvg(history, axis, startIdx, count) {
+  let sum = 0;
+  let n = 0;
+  for (let i = startIdx; i < startIdx + count && i < history.length; i++) {
+    const v = history[i] && history[i][axis];
+    if (typeof v === 'number' && Number.isFinite(v)) {
+      sum += v;
+      n += 1;
+    }
+  }
+  return n === 0 ? null : sum / n;
+}
+
+function _slopeSign(recent, prior) {
+  if (recent === null || prior === null) return 'flat';
+  const delta = recent - prior;
+  // Flat threshold = 5% of |prior|. When prior is 0, treat any non-zero
+  // delta as the corresponding direction (avoid divide-by-zero).
+  const threshold = Math.abs(prior) * QUALITY_TREND_FLAT_THRESHOLD_PCT;
+  if (Math.abs(delta) < threshold) return 'flat';
+  if (delta > 0) return 'up';
+  return 'down';
+}
+
+function computeQualityTrend(history) {
+  if (!Array.isArray(history) || history.length < 6) return null;
+  const N = history.length;
+  // recent = last 3; prior = the 3 before that. Verdicts are appended chrono-
+  // logically per cmdRecord, so [-3:] is the most recent window.
+  const recentStart = N - QUALITY_TREND_WINDOW;
+  const priorStart = N - QUALITY_TREND_WINDOW * 2;
+  const out = { window: QUALITY_TREND_WINDOW };
+  for (const axis of ['findings_per_10k', 'file_citations_per_finding']) {
+    const recent = _windowedAvg(history, axis, recentStart, QUALITY_TREND_WINDOW);
+    const prior = _windowedAvg(history, axis, priorStart, QUALITY_TREND_WINDOW);
+    out[axis] = {
+      recent_avg: recent,
+      prior_avg: prior,
+      slope_sign: _slopeSign(recent, prior),
+    };
+  }
+  return out;
+}
+
 // H.7.2 — weighted trust score weights. Theory-driven (n<20 verdicts; cannot
 // fit empirically yet). Magnitudes chosen per these citations:
 //   findings_per_10k: Dunsmore 2003 ("review effectiveness ~ defect density")
@@ -210,7 +394,14 @@ function aggregateQualityFactors(history) {
 // H.7.4 — Weight profile version. Surfaced in computeWeightedTrustScore output
 // so historical scores can be tagged with their profile-of-origin. Bump on any
 // weight-table or normalization-scale change.
-const WEIGHT_PROFILE_VERSION = "h7.4-empirical-v1";
+//
+// H.7.0 (multi-axis ship): bumped from h7.4-empirical-v1 → h7.0-multi-axis-v1.
+// New axis added: task_complexity_weighted_pass (in score, +0.10). Two more
+// axes (recency_decay_factor, qualityTrend) ship as OBSERVABLE-ONLY this phase
+// per architect-mira CRITICAL C-2 (sample-size insufficient to fit empirically;
+// will move into score formula at H.7.5+ once n≥30 per-identity verdicts span
+// ≥30 days). See pattern doc "Multi-Axis Trust Signal (H.7.0)" section.
+const WEIGHT_PROFILE_VERSION = "h7.0-multi-axis-v1";
 
 // H.7.4 — Empirical refit (one-axis adjustment).
 // file_citations_per_finding: 0.10 → 0.135 per Pearson r=0.439 (n=20, moderate
@@ -224,6 +415,17 @@ const WEIGHT_PROFILE_VERSION = "h7.4-empirical-v1";
 //     token half; substantive tasks → more tokens AND more passes). The negative
 //     weight is a deliberate efficiency penalty (normative), not a descriptive
 //     prediction. See pattern doc "Tokens override rationale" subsection.
+// H.7.0 — task_complexity_weighted_pass added at +0.10 (architect-mira H-1).
+// Theory: passRate weighted by task complexity bucket; same Bacchelli & Bird
+// MSR 2013 evidence-depth framework as file_citations_per_finding. Bucket
+// weights {trivial: 0.5, standard: 1.0, compound: 1.5} applied at axis-compute
+// time inside computeTaskComplexityWeightedPass(). Refit gated on H.7.5+ data.
+//
+// New positive-weights sum after H.7.0 = 0.585 (was 0.535 at H.7.4):
+//   0.10 + 0.135 + 0.05 + 0.10 + 0.15 + 0.10 = 0.635 (subtracting the -0.05
+//   tokens weight that's separately subtracted) = 0.585 effective bonus from
+//   above. BONUS_CAP.max stays at 0.50 — cap-from-above is real and active for
+//   top-decile identities (matches the H.7.4 cap-from-above semantic).
 const WEIGHTS = Object.freeze({
   findings_per_10k: 0.10,
   file_citations_per_finding: 0.135,
@@ -231,6 +433,7 @@ const WEIGHTS = Object.freeze({
   kb_provenance_verified_pct: 0.10,
   convergence_agree_pct: 0.15,
   tokens: -0.05,
+  task_complexity_weighted_pass: 0.10,
 });
 
 // H.7.2 — reference scales for clamp-to-[0,1] linear normalization. Each pair
@@ -247,6 +450,11 @@ const REFERENCE_SCALES = Object.freeze({
   findings_per_10k: [0.5, 2.5],
   file_citations_per_finding: [1.5, 6.0],
   tokens: [50000, 150000],
+  // H.7.0 — task_complexity_weighted_pass already in [0,1] (it's a weighted
+  // passRate). Pass-through clamp via the !scale branch in normalizeAxis
+  // (see agent-identity.js:268-272). Listed explicitly here for documentation
+  // even though `null` would also route to the pass-through path.
+  task_complexity_weighted_pass: null,
 });
 
 // H.7.2 — bonus cap range. Applied AFTER summing per-axis contributions.
@@ -304,12 +512,21 @@ function computeWeightedTrustScore(stats, aggregateQF) {
   const total = (stats.verdicts.pass || 0) + (stats.verdicts.partial || 0) + (stats.verdicts.fail || 0);
   const passRate = total === 0 ? 0 : (stats.verdicts.pass || 0) / total;
 
+  // H.7.0 — derive task_complexity_weighted_pass from history at score-time
+  // (architect-mira CRITICAL C-3: avoids storing on the verdict to prevent
+  // the silent-denominator-shift wound). The history is on the stats object;
+  // hand-merge the derived axis into aggregateQF so the existing loop
+  // machinery picks it up alongside the natively-aggregated axes.
+  const taskComplexityAxis = computeTaskComplexityWeightedPass(stats.quality_factors_history || []);
+  aggregateQF.task_complexity_weighted_pass = taskComplexityAxis;
+
   const components = {};
   let bonusSum = 0;
   const notes = [];
 
-  // Iterate the 6 axes carrying weights. Order is stable for deterministic
-  // JSON output (consumers can rely on key order in V8 for own-property keys).
+  // Iterate the 7 axes carrying weights (H.7.0 added task_complexity_weighted_pass).
+  // Order is stable for deterministic JSON output (consumers can rely on key
+  // order in V8 for own-property keys).
   const axes = [
     'findings_per_10k',
     'file_citations_per_finding',
@@ -317,6 +534,7 @@ function computeWeightedTrustScore(stats, aggregateQF) {
     'kb_provenance_verified_pct',
     'convergence_agree_pct',
     'tokens',
+    'task_complexity_weighted_pass',
   ];
 
   for (const axis of axes) {
@@ -428,11 +646,51 @@ function cmdAssign(args) {
       process.exit(1);
     }
     if (store.nextIndex[args.persona] === undefined) store.nextIndex[args.persona] = 0;
-    const idx = store.nextIndex[args.persona];
-    const name = liveRoster[idx % liveRoster.length];
-    store.nextIndex[args.persona] = (idx + 1) % liveRoster.length;
 
-    const identity = _backfillH66Schema(ensureIdentity(store, args.persona, name));
+    // H.7.0 — specialization-aware pick (architect-mira Decision 6).
+    // When --task supplied AND any live identity has overlap with the task in
+    // its specializations[], prefer that identity (sorted by overlap-count
+    // desc; ties → round-robin). Falls back to current round-robin behavior
+    // when no overlap exists. Pure additive; no behavioral change for callers
+    // that don't pass --task.
+    let name;
+    let pickReason = 'round-robin';
+    if (typeof args.task === 'string' && args.task.length > 0) {
+      // Score each live name by overlap count with task signature.
+      const scored = liveRoster.map((n) => {
+        const id = `${args.persona}.${n}`;
+        const existing = store.identities[id];
+        const specs = (existing && Array.isArray(existing.specializations)) ? existing.specializations : [];
+        let overlap = 0;
+        for (const s of specs) {
+          if (typeof s !== 'string') continue;
+          if (s === args.task) overlap += 2;  // exact match weighs more
+          else if (args.task.includes(s) || s.includes(args.task)) overlap += 1;
+        }
+        return { name: n, overlap };
+      });
+      const maxOverlap = Math.max(0, ...scored.map((s) => s.overlap));
+      if (maxOverlap > 0) {
+        // Prefer the highest-overlap candidate; ties broken by round-robin position
+        const best = scored.filter((s) => s.overlap === maxOverlap);
+        // Use round-robin index modulo best-pool size for deterministic tie-break
+        const idx2 = store.nextIndex[args.persona] || 0;
+        name = best[idx2 % best.length].name;
+        pickReason = 'specialization-overlap';
+      }
+    }
+    if (!name) {
+      const idx = store.nextIndex[args.persona];
+      name = liveRoster[idx % liveRoster.length];
+    }
+    // Always advance round-robin counter (matches pre-H.7.0 behavior; keeps
+    // the counter rotation in sync regardless of pick reason).
+    {
+      const idx = store.nextIndex[args.persona];
+      store.nextIndex[args.persona] = (idx + 1) % liveRoster.length;
+    }
+
+    const identity = _backfillSchema(ensureIdentity(store, args.persona, name));
     identity.lastSpawnedAt = new Date().toISOString();
     identity.totalSpawns += 1;
 
@@ -458,6 +716,7 @@ function cmdAssign(args) {
       tier: tierOf(identity),
       totalSpawns: identity.totalSpawns,
       task: args.task || null,
+      pickReason,  // H.7.0 — 'specialization-overlap' | 'round-robin'
       forgeNeeded,
     };
     if (blocking) {
@@ -495,11 +754,17 @@ function cmdStats(args) {
       console.error(`Unknown identity: ${args.identity}`);
       process.exit(1);
     }
-    _backfillH66Schema(data);  // surface aggregate even on legacy records
+    _backfillSchema(data);  // surface aggregate even on legacy records
     const total = data.verdicts.pass + data.verdicts.partial + data.verdicts.fail;
     // H.7.2 — compute aggregateQF ONCE and pass it both to the surfaced field
     // AND to computeWeightedTrustScore (avoids double-walking the history).
     const aggregateQF = aggregateQualityFactors(data.quality_factors_history);
+    // H.7.0 — observable-only diagnostics. Architect-mira CRITICAL C-2:
+    // these are surfaced for ranking/audit but do NOT enter the score formula
+    // until n≥30 per-identity verdicts span ≥30 days.
+    const recencyDecayFactor = computeRecencyDecay(data.quality_factors_history);
+    const qualityTrend = computeQualityTrend(data.quality_factors_history);
+    const taskComplexityWeightedPass = computeTaskComplexityWeightedPass(data.quality_factors_history);
     const out = {
       identity: args.identity,
       tier: tierOf(data),
@@ -510,15 +775,28 @@ function cmdStats(args) {
       skillInvocations: data.skillInvocations,
       createdAt: data.createdAt,
       lastSpawnedAt: data.lastSpawnedAt,
+      // H.7.0 — drift-detection counters surfaced for diagnostic visibility.
+      // spawnsSinceFullVerify is the input to the recalibration_due trigger
+      // in cmdRecommendVerification (>= 10 → forces full-verify regardless
+      // of tier). lastFullVerifyAt is the ISO timestamp of last full verify.
+      spawnsSinceFullVerify: data.spawnsSinceFullVerify,
+      lastFullVerifyAt: data.lastFullVerifyAt,
+      // H.7.0 — observable-only diagnostics (CRITICAL C-2). Score formula
+      // only consumes task_complexity_weighted_pass at H.7.0; recency_decay
+      // and qualityTrend will move into the formula at H.7.5+ once data permits.
+      recency_decay_factor: recencyDecayFactor,
+      qualityTrend,
+      task_complexity_weighted_pass: taskComplexityWeightedPass,
       // H.7.0-prep — multi-axis quality signal. Trust formula (tier) is
-      // unchanged; this block surfaces the data H.7.0 will weight empirically
-      // once ≥20 builder verdicts have accumulated. Means computed over
-      // non-null values; null when no observations on that axis yet.
+      // unchanged; this block surfaces the data H.7.0 weights via the new
+      // task_complexity_weighted_pass axis (in score) plus the observable-only
+      // axes above.
       aggregate_quality_factors: aggregateQF,
       // H.7.2 — supplemental weighted trust score. Tier (above) remains the
       // audit-default; this is a higher-resolution sibling signal computed from
       // aggregate_quality_factors. Null when no quality history exists. Pure
       // function; auditable via the per-axis `components` decomposition.
+      // H.7.0: components.task_complexity_weighted_pass is now populated.
       weighted_trust_score: computeWeightedTrustScore(data, aggregateQF),
     };
     console.log(JSON.stringify(out, null, 2));
@@ -753,9 +1031,32 @@ function cmdTier(args) {
   }, null, 2));
 }
 
+// H.7.0 — drift-detection threshold. Architect-mira H-3: theory-driven default
+// N=10 (matches retireMinVerdicts). Refit gate at H.7.5+ once 3 high-trust
+// identities have ≥30 verdicts each.
+const RECALIBRATION_SPAWN_THRESHOLD = 10;
+
+// H.7.0 — full-verify policy used by drift triggers. Same shape as
+// VERIFICATION_POLICY['low-trust'] but with a drift-specific rationale slot.
+const FULL_VERIFY_POLICY = Object.freeze({
+  verification: 'symmetric-pair',
+  spawnChallenger: true,
+  challengerCount: 2,
+  skipChecks: [],
+  rationale: 'Full-verify forced by drift trigger; tier policy preempted',
+});
+
+const ASYMMETRIC_CHALLENGER_POLICY = Object.freeze({
+  verification: 'asymmetric-challenger',
+  spawnChallenger: true,
+  challengerCount: 1,
+  skipChecks: [],
+  rationale: 'Drift trigger: task signature outside identity specializations[]',
+});
+
 function cmdRecommendVerification(args) {
   if (!args.identity) {
-    console.error('Usage: recommend-verification --identity <persona.name>');
+    console.error('Usage: recommend-verification --identity <persona.name> [--task <tag>] [--force-full-verify]');
     process.exit(1);
   }
   const store = readStore();
@@ -764,7 +1065,79 @@ function cmdRecommendVerification(args) {
     console.error(`Unknown identity: ${args.identity}`);
     process.exit(1);
   }
+  _backfillSchema(data);  // ensure H.7.0 fields exist on legacy records
   const tier = tierOf(data);
+
+  // H.7.0 — drift pre-check block (architect-mira Decision 7). Order is load-
+  // bearing; first match wins. The existing tier-table is the fall-through.
+  // Each pre-check returns the policy + a recalibration_reason field; the
+  // tier-table behavior at the bottom is unchanged from H.7.4.
+
+  // (1) --force-full-verify flag: explicit user override
+  if (args['force-full-verify']) {
+    console.log(JSON.stringify({
+      identity: args.identity,
+      tier,
+      ...FULL_VERIFY_POLICY,
+      recalibration_reason: 'force-full-verify-flag',
+    }, null, 2));
+    return;
+  }
+
+  // (2) recalibration_due: spawnsSinceFullVerify >= threshold
+  const recalibrationDue = (data.spawnsSinceFullVerify || 0) >= RECALIBRATION_SPAWN_THRESHOLD;
+  if (recalibrationDue) {
+    console.log(JSON.stringify({
+      identity: args.identity,
+      tier,
+      ...FULL_VERIFY_POLICY,
+      recalibration_reason: 'spawn-counter',
+      spawnsSinceFullVerify: data.spawnsSinceFullVerify,
+      threshold: RECALIBRATION_SPAWN_THRESHOLD,
+    }, null, 2));
+    return;
+  }
+
+  // (3) high-trust + task-novelty (no specialization overlap)
+  if (tier === 'high-trust' && typeof args.task === 'string' && args.task.length > 0) {
+    const specs = Array.isArray(data.specializations) ? data.specializations : [];
+    const overlap = specs.includes(args.task) ||
+      specs.some((s) => typeof s === 'string' && (
+        args.task.includes(s) || s.includes(args.task)
+      ));
+    if (specs.length > 0 && !overlap) {
+      console.log(JSON.stringify({
+        identity: args.identity,
+        tier,
+        ...ASYMMETRIC_CHALLENGER_POLICY,
+        recalibration_reason: 'task-novelty',
+        task: args.task,
+        specializations: specs,
+      }, null, 2));
+      return;
+    }
+  }
+
+  // (4) high-trust + qualityTrend declining (slope_sign === 'down' on either axis)
+  if (tier === 'high-trust') {
+    const qt = computeQualityTrend(data.quality_factors_history || []);
+    if (qt) {
+      const findingsDown = qt.findings_per_10k && qt.findings_per_10k.slope_sign === 'down';
+      const citationsDown = qt.file_citations_per_finding && qt.file_citations_per_finding.slope_sign === 'down';
+      if (findingsDown || citationsDown) {
+        console.log(JSON.stringify({
+          identity: args.identity,
+          tier,
+          ...FULL_VERIFY_POLICY,
+          recalibration_reason: 'quality-trend-down',
+          qualityTrend: qt,
+        }, null, 2));
+        return;
+      }
+    }
+  }
+
+  // (5) Fall-through to existing tier-based policy table (unchanged behavior).
   const policy = VERIFICATION_POLICY[tier];
   console.log(JSON.stringify({
     identity: args.identity,
@@ -773,13 +1146,27 @@ function cmdRecommendVerification(args) {
   }, null, 2));
 }
 
+// H.7.0 — verification-depth values for the --verification-depth flag.
+// 'full', 'asymmetric', 'symmetric' are full-equivalent (counter resets);
+// 'spot' is the only one that increments spawnsSinceFullVerify.
+const VALID_VERIFICATION_DEPTHS = ['full', 'spot', 'asymmetric', 'symmetric'];
+const FULL_EQUIVALENT_DEPTHS = ['full', 'asymmetric', 'symmetric'];
+
 function cmdRecord(args) {
   if (!args.identity || !args.verdict) {
-    console.error('Usage: record --identity <persona.name> --verdict pass|partial|fail [--task <tag>] [--skills s1,s2] [--quality-factors-json <json>]');
+    console.error('Usage: record --identity <persona.name> --verdict pass|partial|fail [--task <tag>] [--skills s1,s2] [--quality-factors-json <json>] [--verification-depth full|spot|asymmetric|symmetric]');
     process.exit(1);
   }
   if (!['pass', 'partial', 'fail'].includes(args.verdict)) {
     console.error(`Invalid verdict: ${args.verdict}. Must be pass|partial|fail.`);
+    process.exit(1);
+  }
+  // H.7.0 — parse --verification-depth (default 'full' for back-compat with
+  // all existing callers). Architect-mira M-2: drives the spawnsSinceFullVerify
+  // counter that powers the recalibration_due drift trigger.
+  const verificationDepth = args['verification-depth'] || 'full';
+  if (!VALID_VERIFICATION_DEPTHS.includes(verificationDepth)) {
+    console.error(`Invalid --verification-depth: ${verificationDepth}. Must be ${VALID_VERIFICATION_DEPTHS.join('|')}.`);
     process.exit(1);
   }
   // H.7.0-prep — parse optional quality-factors payload up-front; fail loudly
@@ -803,7 +1190,7 @@ function cmdRecord(args) {
       console.error(`Unknown identity: ${args.identity}. Run "assign" first.`);
       process.exit(1);
     }
-    _backfillH66Schema(data);  // ensure H.7.0-prep field exists on legacy records
+    _backfillSchema(data);  // ensure H.7.0-prep + H.7.0 fields exist on legacy records
     data.verdicts[args.verdict] += 1;
     if (args.task && !data.specializations.includes(args.task)) {
       // Track up to 5 most-recent task tags (rough proxy for specialization).
@@ -815,11 +1202,23 @@ function cmdRecord(args) {
         data.skillInvocations[s] = (data.skillInvocations[s] || 0) + 1;
       }
     }
+    // H.7.0 — drift-detection counter mutation. Full-equivalent depths reset
+    // the counter to 0 + stamp lastFullVerifyAt; 'spot' increments. The default
+    // 'full' for callers that don't pass the flag preserves H.6.x behavior
+    // (counter stays at 0 for legacy identities; no behavior change).
+    const ts = new Date().toISOString();
+    if (FULL_EQUIVALENT_DEPTHS.includes(verificationDepth)) {
+      data.spawnsSinceFullVerify = 0;
+      data.lastFullVerifyAt = ts;
+    } else {
+      // 'spot' — increment counter; do NOT touch lastFullVerifyAt
+      data.spawnsSinceFullVerify = (data.spawnsSinceFullVerify || 0) + 1;
+    }
     // H.7.0-prep — append per-verdict quality factors entry. Always recorded,
     // even when payload is empty/null — gives us a per-verdict timestamp + verdict
     // shape for future correlation analysis. Bounded by QUALITY_FACTORS_HISTORY_CAP.
     const entry = {
-      ts: new Date().toISOString(),
+      ts,
       verdict: args.verdict,
       task_signature: args.task || null,
       // Multi-axis signal — null when caller didn't supply (backwards-compat).
@@ -831,6 +1230,10 @@ function cmdRecord(args) {
       // H.7.1 — paired-with + convergence (carried in via quality-factors-json from pattern-recorder)
       paired_with: qualityFactors && typeof qualityFactors.paired_with === 'string' ? qualityFactors.paired_with : null,
       convergence: qualityFactors && typeof qualityFactors.convergence === 'string' ? qualityFactors.convergence : null,
+      // H.7.0 — task-complexity override (from pattern-recorder propagation).
+      // Captured but NOT yet consumed by computeTaskComplexityWeightedPass
+      // (which reads task_signature via route-decide). Reserved for H.7.5+.
+      task_complexity_override: qualityFactors && typeof qualityFactors.task_complexity_override === 'string' ? qualityFactors.task_complexity_override : null,
     };
     data.quality_factors_history.push(entry);
     if (data.quality_factors_history.length > QUALITY_FACTORS_HISTORY_CAP) {
@@ -844,6 +1247,8 @@ function cmdRecord(args) {
       tier: tierOf(data),
       totalRecorded: data.verdicts.pass + data.verdicts.partial + data.verdicts.fail,
       qualityFactorsRecorded: qualityFactors !== null,
+      verificationDepth,
+      spawnsSinceFullVerify: data.spawnsSinceFullVerify,
     }, null, 2));
   });
 }
@@ -926,7 +1331,7 @@ function cmdPrune(args) {
     };
 
     for (const [id, identity] of Object.entries(store.identities)) {
-      _backfillH66Schema(identity);
+      _backfillSchema(identity);
       const result = _computeRecommendation(identity, thresholds);
       if (result.skip) continue;
 
@@ -987,7 +1392,7 @@ function cmdUnretire(args) {
       console.error(`Unknown identity: ${id}`);
       process.exit(1);
     }
-    _backfillH66Schema(store.identities[id]);
+    _backfillSchema(store.identities[id]);
     const before = !!store.identities[id].retired;
     store.identities[id].retired = false;
     store.identities[id].retiredAt = null;
@@ -996,6 +1401,253 @@ function cmdUnretire(args) {
     console.log(JSON.stringify({ action: 'unretire', identity: id, wasRetired: before }, null, 2));
   });
 }
+
+// H.7.0 — agent-identity breed subcommand. Architect-mira Decision 5 +
+// Implementation handoff (lines 114-125 of design doc):
+//   agent-identity breed --persona X [--parent <id>] [--name <kid>] [--auto]
+//
+// Flow:
+//   1. Validate args.persona is in DEFAULT_ROSTERS.
+//   2. Read store; backfill all identities; filter to live (non-retired).
+//   3. Diversity-guard (H-2): refuse when count(generation==0 live) <= 1.
+//   4. Population-cap (H-4): refuse when live.length >= rosters[X].length.
+//   5. Pick parent: --parent or highest weighted_trust_score (tie → passRate).
+//   6. Pick kid name: --name or first roster name not currently in identities.
+//   7. User-gate: first breed for this persona AND !args.auto → emit
+//      requires_confirmation: true and exit 0; subsequent calls proceed.
+//   8. Create kid: parent, generation+1, copy traits, empty verdicts/history.
+//   9. writeStore. Output structured JSON.
+function cmdBreed(args) {
+  if (!args.persona) {
+    console.error('Usage: breed --persona <NN-name> [--parent <id>] [--name <kid>] [--auto]');
+    process.exit(1);
+  }
+  let exitCode = 0;
+  let output;
+  withLock(() => {
+    const store = readStore();
+    if (!store.rosters[args.persona]) {
+      console.error(`No roster for persona: ${args.persona}. Add one to DEFAULT_ROSTERS or store.rosters.`);
+      process.exit(1);
+    }
+    // Backfill ALL identities so generation/traits are present even on legacy.
+    for (const id of Object.keys(store.identities)) {
+      _backfillSchema(store.identities[id]);
+    }
+
+    // Filter live identities of this persona.
+    const liveOfPersona = Object.values(store.identities).filter(
+      (i) => i.persona === args.persona && !i.retired
+    );
+
+    // (3) Diversity-guard: at least 2 generation-0 live identities required
+    // (so breeding leaves at least 1 generalist behind). Architect-mira H-2.
+    const gen0Live = liveOfPersona.filter((i) => (i.generation || 0) === 0);
+    if (gen0Live.length <= 1) {
+      output = {
+        action: 'breed',
+        applied: false,
+        error: `diversity-guard: only ${gen0Live.length} generation-0 live identity for ${args.persona}; refusing to breed (would leave 0 generalists).`,
+        suggestions: [
+          `Add a new generation-0 name to DEFAULT_ROSTERS['${args.persona}']`,
+          `Un-retire a previously-retired generation-0 identity via 'unretire --identity ${args.persona}.<name>'`,
+        ],
+      };
+      exitCode = 1;
+      return;
+    }
+
+    // (4) Population-cap: live.length < rosters[persona].length required.
+    // Architect-mira H-4.
+    const rosterSize = store.rosters[args.persona].length;
+    if (liveOfPersona.length >= rosterSize) {
+      output = {
+        action: 'breed',
+        applied: false,
+        error: `population-cap: ${args.persona} at ${liveOfPersona.length}/${rosterSize} live identities; no slot available.`,
+        suggestions: [
+          `Retire an underperforming identity first (run 'prune --auto')`,
+          `Extend the roster: add a name to DEFAULT_ROSTERS['${args.persona}']`,
+        ],
+      };
+      exitCode = 1;
+      return;
+    }
+
+    // (5) Pick parent.
+    let parent;
+    if (args.parent) {
+      parent = store.identities[args.parent];
+      if (!parent || parent.persona !== args.persona || parent.retired) {
+        output = {
+          action: 'breed',
+          applied: false,
+          error: `--parent ${args.parent} invalid: must be a live identity belonging to persona ${args.persona}.`,
+        };
+        exitCode = 1;
+        return;
+      }
+    } else {
+      // Rank by weighted_trust_score; tie-break by passRate; final tie-break
+      // by createdAt (oldest first — established identities favored).
+      const ranked = liveOfPersona.map((i) => {
+        const total = (i.verdicts.pass || 0) + (i.verdicts.partial || 0) + (i.verdicts.fail || 0);
+        const pr = total === 0 ? 0 : (i.verdicts.pass || 0) / total;
+        const aggregateQF = aggregateQualityFactors(i.quality_factors_history);
+        const wts = computeWeightedTrustScore(i, aggregateQF);
+        return {
+          identity: i,
+          score: wts ? wts.score : pr,
+          passRate: pr,
+        };
+      });
+      ranked.sort((a, b) => {
+        if (b.score !== a.score) return b.score - a.score;
+        if (b.passRate !== a.passRate) return b.passRate - a.passRate;
+        return (a.identity.createdAt || '').localeCompare(b.identity.createdAt || '');
+      });
+      parent = ranked[0].identity;
+    }
+
+    // (6) Pick kid name.
+    let kidName = args.name;
+    if (!kidName) {
+      const usedNames = new Set(
+        Object.values(store.identities)
+          .filter((i) => i.persona === args.persona)
+          .map((i) => i.name)
+      );
+      const free = store.rosters[args.persona].filter((n) => !usedNames.has(n));
+      if (free.length === 0) {
+        output = {
+          action: 'breed',
+          applied: false,
+          error: `no free roster name for ${args.persona}; all roster names already in use (live or retired).`,
+          suggestions: [
+            `Pass --name <new-name> to introduce a name outside the roster`,
+            `Extend the roster: add a name to DEFAULT_ROSTERS['${args.persona}']`,
+          ],
+        };
+        exitCode = 1;
+        return;
+      }
+      kidName = free[0];
+    }
+    const kidId = `${args.persona}.${kidName}`;
+    if (store.identities[kidId]) {
+      output = {
+        action: 'breed',
+        applied: false,
+        error: `kid identity ${kidId} already exists; pass --name <fresh-name> or retire the existing first.`,
+      };
+      exitCode = 1;
+      return;
+    }
+
+    // (7) User-gate: first breed for this persona AND !args.auto.
+    if (!store.breedFirstPromptedFor) store.breedFirstPromptedFor = {};
+    const firstBreedForPersona = !store.breedFirstPromptedFor[args.persona];
+    if (firstBreedForPersona && !args.auto) {
+      // Mark as prompted; user must re-invoke (or pass --auto) to actually breed.
+      store.breedFirstPromptedFor[args.persona] = true;
+      writeStore(store);
+      output = {
+        action: 'breed',
+        applied: false,
+        requires_confirmation: true,
+        message: `First breed for persona ${args.persona}. Re-invoke with --auto to confirm or pass --auto on this call to bypass.`,
+        plannedKid: kidId,
+        plannedParent: `${parent.persona}.${parent.name}`,
+        plannedGeneration: (parent.generation || 0) + 1,
+        plannedTraitsInherited: parent.traits ? { ...parent.traits } : {},
+      };
+      return;
+    }
+
+    // (8) Create kid.
+    const parentId = `${parent.persona}.${parent.name}`;
+    const traitsInherited = parent.traits ? { ...parent.traits } : { skillFocus: null, kbFocus: [], taskDomain: null };
+    // kbFocus is an array; deep-copy to prevent mutation aliasing.
+    if (Array.isArray(traitsInherited.kbFocus)) {
+      traitsInherited.kbFocus = [...traitsInherited.kbFocus];
+    }
+    const newGeneration = (parent.generation || 0) + 1;
+    store.identities[kidId] = {
+      persona: args.persona,
+      name: kidName,
+      createdAt: new Date().toISOString(),
+      lastSpawnedAt: null,
+      totalSpawns: 0,
+      verdicts: { pass: 0, partial: 0, fail: 0 },
+      specializations: [],
+      skillInvocations: {},
+      retired: false,
+      retiredAt: null,
+      retiredReason: null,
+      parent: parentId,
+      generation: newGeneration,
+      traits: traitsInherited,
+      quality_factors_history: [],
+      // H.7.0 — kid starts fresh per architect-mira note line 185
+      // "kid is unproven; the counter is per-identity, not per-lineage."
+      spawnsSinceFullVerify: 0,
+      lastFullVerifyAt: null,
+    };
+    writeStore(store);
+
+    // (9) Output.
+    output = {
+      action: 'breed',
+      applied: true,
+      kid: kidId,
+      parent: parentId,
+      generation: newGeneration,
+      traits_inherited: traitsInherited,
+    };
+    // Human-readable stderr summary (architect-mira L-3).
+    process.stderr.write(`bred: ${parentId} → ${kidId} (gen ${newGeneration}; traits: ${JSON.stringify(traitsInherited)})\n`);
+  });
+  console.log(JSON.stringify(output, null, 2));
+  if (exitCode) process.exit(exitCode);
+}
+
+// H.7.0 — module exports for in-process testing. Pure functions only;
+// CLI subcommands stay as-is below. Tests require this module and exercise
+// the functions directly without spawning subprocesses (much faster + lets
+// us inject HETS_IDENTITY_STORE pointing at a temp file).
+module.exports = {
+  // Constants
+  WEIGHT_PROFILE_VERSION,
+  WEIGHTS,
+  REFERENCE_SCALES,
+  BONUS_CAP,
+  RECALIBRATION_SPAWN_THRESHOLD,
+  RECENCY_HALF_LIFE_DAYS,
+  QUALITY_TREND_WINDOW,
+  TASK_COMPLEXITY_BUCKET_WEIGHTS,
+  DEFAULT_ROSTERS,
+  // Pure helpers
+  tierOf,
+  bucketTaskComplexity,
+  computeTaskComplexityWeightedPass,
+  computeRecencyDecay,
+  computeQualityTrend,
+  aggregateQualityFactors,
+  computeWeightedTrustScore,
+  normalizeAxis,
+  _backfillSchema,
+  // Subcommand handlers (for integration testing)
+  cmdBreed,
+  cmdRecommendVerification,
+  cmdAssign,
+  cmdRecord,
+  cmdStats,
+};
+
+// CLI dispatch — only fires when this file is invoked directly (not required).
+if (require.main !== module) {
+  // Required as a module — skip CLI dispatch.
+} else {
 
 const cmd = process.argv[2];
 const args = parseArgs(process.argv.slice(3));
@@ -1011,12 +1663,32 @@ switch (cmd) {
   case 'record': cmdRecord(args); break;
   case 'prune': cmdPrune(args); break;
   case 'unretire': cmdUnretire(args); break;
+  case 'breed': cmdBreed(args); break;  // H.7.0 — evolution loop L3
+  case '__test_internals__':
+    // H.7.0 — test-only: dump internals for inline test runners. Not for use
+    // by production callers; gated behind explicit subcommand name so it's
+    // never accidentally invoked. Used by tests/agent-identity-h70-test.js.
+    console.log(JSON.stringify({
+      WEIGHT_PROFILE_VERSION,
+      WEIGHTS,
+      REFERENCE_SCALES,
+      BONUS_CAP,
+      RECALIBRATION_SPAWN_THRESHOLD,
+      RECENCY_HALF_LIFE_DAYS,
+      QUALITY_TREND_WINDOW,
+      TASK_COMPLEXITY_BUCKET_WEIGHTS,
+    }, null, 2));
+    break;
   default:
-    console.error('Usage: agent-identity.js {init|assign|list|stats|record|prune|unretire} [args]');
+    console.error('Usage: agent-identity.js {init|assign|list|stats|record|prune|unretire|breed} [args]');
     console.error('  prune [--auto] [--retire-min-verdicts N] [--retire-pass-rate-max F] [--specialist-min-verdicts N] [--specialist-pass-rate-min F] [--specialist-min-invocations N]');
     console.error('    Default: advisory (prints recommendations). --auto applies them.');
     console.error('  unretire --identity <persona.name>');
     console.error('    Restore a soft-retired identity to the active pool.');
+    console.error('  breed --persona <NN-name> [--parent <id>] [--name <kid>] [--auto]');
+    console.error('    H.7.0 — evolution loop. Diversity-guard + population-cap apply.');
     console.error('See https://github.com/anthropics/claude-code for context.');
     process.exit(1);
 }
+
+}  // end if (require.main === module) block

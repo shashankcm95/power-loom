@@ -462,53 +462,69 @@ function scoreTask(task, scoreArgs) {
   return out;
 }
 
+// ---------- module exports (H.7.0) ----------
+//
+// scoreTask is exported so scripts/agent-team/_lib/route-decide-export.js can
+// re-expose it for in-process consumers (e.g., agent-identity.js's
+// bucketTaskComplexity). The CLI behavior below only fires when this file is
+// invoked directly (require.main === module). Pure refactor; CLI semantics
+// unchanged.
+
+module.exports = {
+  scoreTask,
+  ROUTE_THRESHOLD,
+  ROOT_THRESHOLD,
+};
+
 // ---------- main ----------
 
-const args = parseArgs(process.argv.slice(2));
+if (require.main === module) {
+  const args = parseArgs(process.argv.slice(2));
 
-if (args.help || args.h) {
-  process.stdout.write(
-    'Usage: route-decide.js --task "<description>" [--context "<text>"] ' +
-    '[--force-route|--force-root] [--explain]\n' +
-    '\n' +
-    'Scores a task on 7 weighted dimensions and emits a route/borderline/root\n' +
-    'recommendation as JSON to stdout. Pure function; deterministic.\n' +
-    '\n' +
-    'Flags:\n' +
-    '  --task <string>      Required. Task description.\n' +
-    '  --context <string>   Optional. Recent assistant response or prior-turn\n' +
-    '                       text to give the classifier additional signal.\n' +
-    '                       Scored at 0.5x weight relative to --task. Truncated\n' +
-    '                       to last 8K chars (preserves recency). H.7.5.\n' +
-    '  --force-route        Optional. Override heuristic; force route\n' +
-    '                       recommendation; confidence: 1.0; bypasses Layer C\n' +
-    '                       forcing-instruction. H.7.5.\n' +
-    '  --force-root         Optional. Override heuristic; force root\n' +
-    '                       recommendation; confidence: 1.0; bypasses Layer C\n' +
-    '                       forcing-instruction. H.7.5.\n' +
-    '  --explain            Optional. Also print human-readable summary to stderr.\n' +
-    '  --help, -h           This message.\n'
-  );
+  if (args.help || args.h) {
+    process.stdout.write(
+      'Usage: route-decide.js --task "<description>" [--context "<text>"] ' +
+      '[--force-route|--force-root] [--explain]\n' +
+      '\n' +
+      'Scores a task on 7 weighted dimensions and emits a route/borderline/root\n' +
+      'recommendation as JSON to stdout. Pure function; deterministic.\n' +
+      '\n' +
+      'Flags:\n' +
+      '  --task <string>      Required. Task description.\n' +
+      '  --context <string>   Optional. Recent assistant response or prior-turn\n' +
+      '                       text to give the classifier additional signal.\n' +
+      '                       Scored at 0.5x weight relative to --task. Truncated\n' +
+      '                       to last 8K chars (preserves recency). H.7.5.\n' +
+      '  --force-route        Optional. Override heuristic; force route\n' +
+      '                       recommendation; confidence: 1.0; bypasses Layer C\n' +
+      '                       forcing-instruction. H.7.5.\n' +
+      '  --force-root         Optional. Override heuristic; force root\n' +
+      '                       recommendation; confidence: 1.0; bypasses Layer C\n' +
+      '                       forcing-instruction. H.7.5.\n' +
+      '  --explain            Optional. Also print human-readable summary to stderr.\n' +
+      '  --help, -h           This message.\n'
+    );
+    process.exit(0);
+  }
+
+  const task = args.task;
+  if (!task || typeof task !== 'string' || task.trim().length === 0) {
+    process.stderr.write('Usage: route-decide.js --task "<description>"\n');
+    process.exit(2);
+  }
+
+  const result = scoreTask(task, args);
+  process.stdout.write(JSON.stringify(result, null, 2) + '\n');
+
+  if (args.explain) {
+    process.stderr.write(
+      `\nRoute-decide summary:\n` +
+      `  task: ${task}\n` +
+      `  recommendation: ${result.recommendation} (confidence ${result.confidence})\n` +
+      `  score: ${result.score_total}\n` +
+      `  reasoning: ${result.reasoning}\n`
+    );
+  }
+
   process.exit(0);
 }
-
-const task = args.task;
-if (!task || typeof task !== 'string' || task.trim().length === 0) {
-  process.stderr.write('Usage: route-decide.js --task "<description>"\n');
-  process.exit(2);
-}
-
-const result = scoreTask(task, args);
-process.stdout.write(JSON.stringify(result, null, 2) + '\n');
-
-if (args.explain) {
-  process.stderr.write(
-    `\nRoute-decide summary:\n` +
-    `  task: ${task}\n` +
-    `  recommendation: ${result.recommendation} (confidence ${result.confidence})\n` +
-    `  score: ${result.score_total}\n` +
-    `  reasoning: ${result.reasoning}\n`
-  );
-}
-
-process.exit(0);
