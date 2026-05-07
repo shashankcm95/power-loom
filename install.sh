@@ -129,6 +129,22 @@ install_hooks() {
     done
     echo "  -> CLI scripts installed to $CLAUDE_DIR/scripts/"
   fi
+  # publish-polish-H.0: install scripts/agent-team/ (HETS substrate — was previously
+  # only synced via per-phase manual cp; legacy installer now mirrors it explicitly).
+  # Plugin install path resolves these via ${CLAUDE_PLUGIN_ROOT} so it doesn't need
+  # this step — but legacy installer users now get the HETS infrastructure too.
+  if [ -d "$SCRIPT_DIR/scripts/agent-team" ]; then
+    mkdir -p "$CLAUDE_DIR/scripts/agent-team/_lib"
+    for f in "$SCRIPT_DIR"/scripts/agent-team/*.js; do
+      [ -f "$f" ] && cp "$f" "$CLAUDE_DIR/scripts/agent-team/" && chmod +x "$CLAUDE_DIR/scripts/agent-team/$(basename "$f")"
+    done
+    if [ -d "$SCRIPT_DIR/scripts/agent-team/_lib" ]; then
+      for f in "$SCRIPT_DIR"/scripts/agent-team/_lib/*.js; do
+        [ -f "$f" ] && cp "$f" "$CLAUDE_DIR/scripts/agent-team/_lib/"
+      done
+    fi
+    echo "  -> HETS scripts installed to $CLAUDE_DIR/scripts/agent-team/"
+  fi
   echo "  -> Hook scripts installed"
   echo ""
   echo "  NOTE: Hook configuration must be manually merged."

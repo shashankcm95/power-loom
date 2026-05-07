@@ -101,7 +101,7 @@ sources:
   Independent progression based on user approval count
 - **Hybrid deterministic + LLM pre-compact**: Always-write checkpoint paired
   with LLM-driven MemPalace enrichment
-- **8-point hook smoke test suite**: Installer-integrated verification that
+- **7-point hook smoke test suite**: Installer-integrated verification that
   every hook fires correctly with synthetic input
 - **MemPalace graceful degradation**: Local-file fallbacks for every
   MemPalace dependency (`~/.claude/prompt-patterns.json`,
