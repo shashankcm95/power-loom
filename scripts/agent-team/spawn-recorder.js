@@ -14,10 +14,11 @@
 //     skills resolved (or failed to forge), what verdict came back, what
 //     gaps were observed.
 //
-// Storage: append-only JSONL at `~/.claude/spawn-history.jsonl`. One row
-// per spawn event. Schema is intentionally flexible (uses extras JSON
-// passthrough) so callers can attach run-specific metadata without schema
-// migration.
+// Storage: append-only JSONL at `~/.claude/spawn-history.jsonl` by default,
+// or wherever `HETS_SPAWN_HISTORY_PATH` env var points (CS-13: separates
+// IRL test runs from toolkit-meta runs). One row per spawn event. Schema
+// is intentionally flexible (uses extras JSON passthrough) so callers can
+// attach run-specific metadata without schema migration.
 //
 // Subcommands:
 //   record [flags] [--from-stdin]   — append a new row
@@ -40,7 +41,11 @@ try {
   withLock = (_lockPath, fn) => fn();
 }
 
-const HISTORY_PATH = path.join(os.homedir(), '.claude', 'spawn-history.jsonl');
+// CS-13: env-var override for IRL test isolation. Default keeps prior
+// behavior (~/.claude/spawn-history.jsonl). Mirrors the env-var-with-default
+// precedent established in _lib/runState.js (HETS_RUN_STATE_DIR).
+const HISTORY_PATH = process.env.HETS_SPAWN_HISTORY_PATH ||
+  path.join(os.homedir(), '.claude', 'spawn-history.jsonl');
 
 // Schema fields documented here. Callers can attach arbitrary extras via
 // --extras-json; the recorder adds `ts` + `schema_version` automatically.
