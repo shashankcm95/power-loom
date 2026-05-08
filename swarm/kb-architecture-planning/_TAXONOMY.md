@@ -17,13 +17,21 @@ This hybrid avoids the "where does Idempotency live?" duplication problem of pur
 kb/architecture/
 │
 ├── crosscut/                     [FLAT — applies across domains]
-│   ├── dependency-rule.md          [empty]
-│   ├── deep-modules.md             [empty]
-│   ├── information-hiding.md       [empty]
-│   ├── bounded-contexts.md         [empty]
-│   ├── single-responsibility.md    [empty]
-│   ├── trade-off-discipline.md     [empty]
-│   └── anti-corruption-layer.md    [empty]
+│   ├── dependency-rule.md          [notes — first-wave]
+│   ├── deep-modules.md             [notes — first-wave; combines info-hiding]
+│   ├── information-hiding.md       [notes — may merge with deep-modules]
+│   ├── bounded-contexts.md         [notes — second-wave]
+│   ├── single-responsibility.md    [notes — first-wave priority 1]
+│   ├── trade-off-discipline.md     [notes — first-wave]
+│   ├── idempotency.md              [notes — first-wave; cross-cutting from data/]
+│   ├── anti-corruption-layer.md    [empty]
+│   │   # Package design (from Principles of Package Design — Noback)
+│   ├── acyclic-dependencies.md     [notes — first-wave]
+│   ├── release-reuse-equivalence.md [empty — second-wave]
+│   ├── common-reuse.md             [empty — second-wave]
+│   ├── common-closure.md           [empty — second-wave]
+│   ├── stable-dependencies.md      [empty — second-wave; with I-metric]
+│   └── stable-abstraction.md       [empty — second-wave; with A-metric]
 │
 ├── frontend/                     [HIERARCHICAL — UI / client-side]
 │   ├── markup/
@@ -66,11 +74,33 @@ kb/architecture/
 │       ├── locking-strategies.md   [empty]
 │       └── eventual-consistency.md [empty]
 │
-└── discipline/                   [FLAT — engineering practice]
-    ├── refusal-patterns.md         [empty]
-    ├── adr-template.md             [empty]
-    ├── failure-mode-analysis.md    [empty]
-    └── trade-off-articulation.md   [empty]
+├── discipline/                   [FLAT — engineering practice]
+│   ├── refusal-patterns.md         [empty]
+│   ├── adr-template.md             [empty]
+│   ├── failure-mode-analysis.md    [empty]
+│   ├── trade-off-articulation.md   [notes — first-wave]
+│   ├── error-handling-discipline.md [notes — first-wave; from charlax+Clean Code+PoSD]
+│   ├── reliability-scalability-maintainability.md [notes — first-wave; from DDIA ch 1+SRE]
+│   ├── stability-patterns.md       [notes — first-wave; from Release It!+Hard Parts]
+│   └── clean-code-essentials.md    [empty — third-wave; from Clean Code+PoSD]
+│
+├── architecture-styles/          [NEW BRANCH — from Mark Richards + Hard Parts]
+│   ├── layered.md                  [notes — second-wave]
+│   ├── event-driven.md             [notes — second-wave; Mediator + Broker]
+│   ├── microkernel.md              [notes — second-wave]
+│   ├── microservices.md            [notes — second-wave]
+│   ├── space-based.md              [notes — second-wave]
+│   └── architecture-quantum.md     [notes — second-wave; from Hard Parts]
+│
+└── ai-systems/                   [NEW BRANCH — substrate-uniquely-relevant]
+    ├── rag-anchoring.md            [notes — first-wave; substrate dogfood]
+    ├── agent-design.md             [notes — second-wave]
+    ├── evaluation-under-nondeterminism.md [notes — second-wave]
+    ├── inference-cost-management.md [notes — third-wave]
+    ├── drift-detection.md          [notes — third-wave; from Designing ML Systems]
+    ├── training-serving-skew.md    [empty — third-wave]
+    ├── prompt-engineering-defenses.md [empty — second-wave]
+    └── multi-agent-coordination.md [empty — substrate-relevant; supplement with papers]
 ```
 
 ## Status legend
@@ -113,8 +143,21 @@ Patterns surfaced during source ingestion that don't fit current taxonomy:
 
 ## Open questions for the user (resolve before authoring)
 
-- Do we want a `security/` top-level branch separate from `backend/authentication/`? Threat modeling, secrets management, encryption-at-rest could live there.
-- Do we want a `testing/` branch under discipline? Test pyramid, contract testing, property-based testing patterns.
-- Is `frontend/state-management/` deep enough for two slots, or should it be one consolidated doc?
+Resolved this session:
 
-These can wait for after a few sources are processed. The taxonomy is intentionally provisional.
+- ~~`security/` as top-level branch?~~ — DEFER; substrate not authoring security primitives currently. Out of scope for v2.0+ KB.
+- ~~`testing/` as top-level branch?~~ — DEFER; charlax test antipatterns absorbed into `discipline/` if needed.
+- ~~Should `architecture-styles/` be its own branch?~~ — YES; resolved by Mark Richards source confirming 5 named styles + Hard Parts adding architecture-quantum concept.
+- ~~Should `ai-systems/` be its own branch?~~ — YES; substrate-uniquely-relevant; AI Engineering (Huyen) is the canonical source.
+
+Still open (defer until first-wave authoring exposes the answer):
+
+- `crosscut/deep-modules.md` vs separate `crosscut/information-hiding.md` — start as combined doc per Ousterhout's framing; may split if it grows past 1500 LoC.
+- `crosscut/idempotency.md` placement — in `crosscut/` since it spans data/api/concurrency rather than living under any one branch.
+- `frontend/state-management/` deep enough for two slots? — defer; frontend is low-priority for substrate.
+
+## Status legend update
+
+Status `[notes]` means notes are accumulated in `_NOTES.md`; ready for or in authoring. After this session, ~25 slots have `[notes]` status; first-wave authoring queue prioritizes the highest-consensus subset.
+
+The taxonomy is intentionally provisional; refining via authoring outcomes is expected.
