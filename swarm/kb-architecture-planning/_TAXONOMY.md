@@ -23,7 +23,7 @@ kb/architecture/
 │   ├── bounded-contexts.md         [notes — second-wave]
 │   ├── single-responsibility.md    [SHIPPED — batch 1, PR #103]
 │   ├── trade-off-discipline.md     [notes — first-wave]
-│   ├── idempotency.md              [notes — first-wave; cross-cutting from data/]
+│   ├── idempotency.md              [SHIPPED — batch 3; cross-cutting from data/]
 │   ├── anti-corruption-layer.md    [empty]
 │   │   # Package design (from Principles of Package Design — Noback)
 │   ├── acyclic-dependencies.md     [notes — first-wave]
@@ -79,7 +79,7 @@ kb/architecture/
 │   ├── adr-template.md             [empty]
 │   ├── failure-mode-analysis.md    [empty]
 │   ├── trade-off-articulation.md   [notes — first-wave]
-│   ├── error-handling-discipline.md [notes — first-wave; from charlax+Clean Code+PoSD]
+│   ├── error-handling-discipline.md [SHIPPED — batch 3; from charlax+Clean Code+PoSD+others]
 │   ├── reliability-scalability-maintainability.md [notes — first-wave; from DDIA ch 1+SRE]
 │   ├── stability-patterns.md       [notes — first-wave; from Release It!+Hard Parts]
 │   └── clean-code-essentials.md    [empty — third-wave; from Clean Code+PoSD]
