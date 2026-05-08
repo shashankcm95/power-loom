@@ -12,6 +12,7 @@ Track which sources were processed in each session. Helps avoid re-processing an
 | 2026-05-08   | Batch 1 ingestion: charlax/antipatterns + DevBooks/data + EbookFoundation/books + manjunath/CS-Reference-Books + 4× ahmedhammad97 + pkardas/notes/books + 2× aza0092 + alysivji + danlebrero + serodriguez68 + softwarephilosopher (16 sources total) | ~30 candidates surfaced; ~10 high-consensus ready to author | 5+ patterns confirmed across 3+ sources | 13/14 foundation books have notes; only AIMA gap (soft). Move to authoring. |
 | 2026-05-08   | Authoring batch 1 | 1 doc shipped | -                 | `crosscut/single-responsibility.md` (302 lines, 7 sources). PR #103 merged. Multi-source synthesis model proven. |
 | 2026-05-08   | Authoring batch 2 | 2 docs shipped | -                | `crosscut/dependency-rule.md` (~440 lines, 5 sources) + `crosscut/deep-modules.md` (~330 lines, 4 sources). DIP/Dependency-Rule paired with the Ousterhout-vs-Martin tension explicit. |
+| 2026-05-08   | Authoring batch 3 | 2 docs shipped | -                | `crosscut/idempotency.md` (~470 lines, 5 sources) + `discipline/error-handling-discipline.md` (~410 lines, 6 sources). Idempotency + error-handling are paired — substrate's forcing-instruction layer is the load-bearing application of both. |
 
 ## Pattern notes
 
@@ -222,8 +223,8 @@ Priority order based on consensus tracker. First-wave items have 2+ Tier-1+2 sou
 | 1 | Single Responsibility Principle | `crosscut/single-responsibility.md` | 4 sources confirmed; substrate `_lib/` discipline relevance; foundational for all subsequent patterns | **SHIPPED batch 1 (PR #103)** |
 | 2 | Dependency Inversion / Dependency Rule | `crosscut/dependency-rule.md` | Maps directly to substrate's kernel/userspace boundary (proto-OS framing) | **SHIPPED batch 2** |
 | 3 | Deep Modules + Information Hiding | `crosscut/deep-modules.md` (combined) | Ousterhout canon; tension-with-Clean-Code captured; substrate hook scripts ARE deep modules | **SHIPPED batch 2** |
-| 4 | Idempotency | `crosscut/idempotency.md` | Cross-cutting; DDIA × 3 chapters; substrate retry semantics | Pending |
-| 5 | End-to-End Error Handling | `discipline/error-handling-discipline.md` | substrate forcing-instruction layer IS this principle | Pending |
+| 4 | Idempotency | `crosscut/idempotency.md` | Cross-cutting; DDIA × 3 chapters; substrate retry semantics | **SHIPPED batch 3** |
+| 5 | End-to-End Error Handling | `discipline/error-handling-discipline.md` | substrate forcing-instruction layer IS this principle | **SHIPPED batch 3** |
 | 6 | RAG Anchoring | `ai-systems/rag-anchoring.md` | THE substrate-relevant pattern; this very KB IS a RAG implementation | Pending |
 | 7 | Trade-off Discipline | `discipline/trade-off-articulation.md` | substrate H.7.22 Principle Audit IS this enforced; codify the substrate's own discipline | Pending |
 | 8 | Reliability / Scalability / Maintainability | `discipline/reliability-scalability-maintainability.md` | substrate H.7.22 R/A/FT extension; align vocabulary | Pending |
@@ -234,11 +235,12 @@ Priority order based on consensus tracker. First-wave items have 2+ Tier-1+2 sou
 
 - Batch 1: 1 doc shipped (SRP)
 - Batch 2: 2 docs shipped (Dependency Rule + Deep Modules)
-- **Cumulative: 3 / 10 first-wave docs shipped**
+- Batch 3: 2 docs shipped (Idempotency + Error Handling)
+- **Cumulative: 5 / 10 first-wave docs shipped**
 
 ### Pace observation
 
-~300-440 lines per doc; 1-2 docs per session is sustainable. Full first-wave (10 docs) likely 4-5 more sessions.
+~300-470 lines per doc; 2 docs per batch is sustainable. Full first-wave (10 docs) likely 2-3 more sessions at this pace.
 
 ## Done log
 
@@ -247,5 +249,7 @@ Patterns shipped to `skills/agent-team/kb/architecture/`. Move entries here from
 | Pattern | Path | Shipped phase | manifest.json updated? |
 |---------|------|---------------|------------------------|
 | Single Responsibility Principle | `architecture/crosscut/single-responsibility.md` | Batch 1 (PR #103) | No — manifest registration deferred to v2.1+ integration phase |
-| Dependency Rule (DIP at all granularities) | `architecture/crosscut/dependency-rule.md` | Batch 2 | No — same |
-| Deep Modules + Information Hiding | `architecture/crosscut/deep-modules.md` | Batch 2 | No — same |
+| Dependency Rule (DIP at all granularities) | `architecture/crosscut/dependency-rule.md` | Batch 2 (PR #104) | No — same |
+| Deep Modules + Information Hiding | `architecture/crosscut/deep-modules.md` | Batch 2 (PR #104) | No — same |
+| Idempotency | `architecture/crosscut/idempotency.md` | Batch 3 | No — same |
+| End-to-End Error Handling | `architecture/discipline/error-handling-discipline.md` | Batch 3 | No — same |
