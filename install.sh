@@ -852,6 +852,41 @@ SETTINGS_EOF
     failed=$((failed + 1))
   fi
 
+  # Test 44 (H.8.1): architecture-relevance-detector matches state-mutation signal
+  # and returns idempotency refs
+  local h8_1_state_result
+  h8_1_state_result=$(node "$SCRIPT_DIR/scripts/agent-team/architecture-relevance-detector.js" detect --task "implement state mutation in distributed system with retry logic" 2>/dev/null)
+  if echo "$h8_1_state_result" | grep -q '"state-mutation"' && echo "$h8_1_state_result" | grep -q 'architecture/crosscut/idempotency'; then
+    echo "  ✓ architecture-relevance-detector: H.8.1 state-mutation signal routes to idempotency"
+    passed=$((passed + 1))
+  else
+    echo "  ✗ architecture-relevance-detector: H.8.1 state-mutation signal should match + route to idempotency"
+    failed=$((failed + 1))
+  fi
+
+  # Test 45 (H.8.1): no-signal task returns empty refs + summary tier (cheap default)
+  local h8_1_empty_result
+  h8_1_empty_result=$(node "$SCRIPT_DIR/scripts/agent-team/architecture-relevance-detector.js" detect --task "hello world" 2>/dev/null)
+  if echo "$h8_1_empty_result" | grep -q '"ref_count": 0' && echo "$h8_1_empty_result" | grep -q '"tier_recommendation": "summary"'; then
+    echo "  ✓ architecture-relevance-detector: H.8.1 no-match task returns empty refs + summary tier"
+    passed=$((passed + 1))
+  else
+    echo "  ✗ architecture-relevance-detector: H.8.1 no-match task should return empty refs"
+    failed=$((failed + 1))
+  fi
+
+  # Test 46 (H.8.1): multiple matched signals (3+) → tier escalates from
+  # summary to quick-ref. Verifies the tier-recommendation logic.
+  local h8_1_complex_result
+  h8_1_complex_result=$(node "$SCRIPT_DIR/scripts/agent-team/architecture-relevance-detector.js" detect --task "extract a shared utility from these 5 services with acyclic dependencies and avoid circular imports; multi-file refactor across modules; trade-off vs DRY" 2>/dev/null)
+  if echo "$h8_1_complex_result" | grep -q '"tier_recommendation": "quick-ref"' && echo "$h8_1_complex_result" | grep -q 'architecture/crosscut/acyclic-dependencies'; then
+    echo "  ✓ architecture-relevance-detector: H.8.1 multi-signal task → quick-ref tier escalation + acyclic ref"
+    passed=$((passed + 1))
+  else
+    echo "  ✗ architecture-relevance-detector: H.8.1 multi-signal task should escalate to quick-ref tier"
+    failed=$((failed + 1))
+  fi
+
   echo ""
   echo "  Results: $passed passed, $failed failed"
   [ "$failed" -gt 0 ] && echo "  ⚠ Some tests failed — check hook scripts and paths"
