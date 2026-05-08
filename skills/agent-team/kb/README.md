@@ -37,13 +37,27 @@ tags: [topic-tag, scope-tag]   # for catalog query
 
 | Subcommand | Purpose | Example |
 |------------|---------|---------|
-| `cat <kb_id>` | Print doc body | `node kb-resolver.js cat hets/spawn-conventions` |
+| `cat <kb_id>` | Print doc body (Tier 3 — full content) | `node kb-resolver.js cat hets/spawn-conventions` |
+| `cat-summary <kb_id>` | Print only `## Summary` section (Tier 1 — cheap inline; H.8.0) | `node kb-resolver.js cat-summary architecture/crosscut/single-responsibility` |
+| `cat-quick-ref <kb_id>` | Print `## Summary` + `## Quick Reference` (Tier 2 — mid; H.8.0) | `node kb-resolver.js cat-quick-ref architecture/crosscut/single-responsibility` |
 | `hash <kb_id>` | SHA-256 of body | `node kb-resolver.js hash hets/spawn-conventions` |
 | `list [--tag X]` | List manifest entries | `node kb-resolver.js list --tag hets` |
 | `resolve <ref>` | Resolve a ref string | `node kb-resolver.js resolve kb:hets/spawn-conventions@a3f1b2c4` |
 | `scan` | Walk tree, refresh manifest | `node kb-resolver.js scan` |
 | `snapshot <run-id>` | Freeze manifest into run-state | `node kb-resolver.js snapshot chaos-20260502-080000` |
 | `register <kb_id>` | Single-file update (alt to scan) | `node kb-resolver.js register web-dev/react-essentials` |
+
+## Tier-aware loading (H.8.0)
+
+Pattern docs in `kb/architecture/` follow a 3-tier structure:
+
+- **Tier 1** (`## Summary` — 5 dense bullets, ~120 tokens): canonical principle + test + smells + sources + substrate-relevant cite
+- **Tier 2** (`## Summary` + `## Quick Reference` — mid-density, ~700-800 tokens): smells, refactor patterns, granularity tables, tensions, substrate examples
+- **Tier 3** (full doc — comprehensive prose, ~5000-6000 tokens): Intent, mechanism, anti-patterns, when-to-use, when-not-to, failure modes, related, sources, phase
+
+Use `cat-summary` / `cat-quick-ref` / `cat` to load only the tier you need. Per the H.7.27 measurement experiment, frequency-weighted retrieval saves ~91% on average injection size.
+
+Older kb docs (without `## Quick Reference`) gracefully fall back: `cat-quick-ref` returns the `## Summary` section + a stderr note. `cat-summary` returns the `## Summary` section. Backward-compatible with all existing kb content.
 
 ## Reference syntax
 

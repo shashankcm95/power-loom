@@ -17,13 +17,27 @@
 //   HETS_RUN_STATE_DIR       — run-state root (default: ~/Documents/claude-toolkit/swarm/run-state)
 //
 // Subcommands:
-//   cat <kb_id>              — print doc body
+//   cat <kb_id>              — print doc body (full content; Tier 3)
+//   cat-summary <kb_id>      — print only `## Summary` section (Tier 1; cheap inline)
+//   cat-quick-ref <kb_id>    — print `## Summary` + `## Quick Reference` sections (Tier 2)
 //   hash <kb_id>             — print SHA-256 of body
 //   list [--tag X]           — list registered KB docs
 //   resolve kb:<id>[@<h>]    — resolve a ref string; verify hash if pinned
 //   scan                     — walk kb/ tree, refresh manifest
 //   snapshot <run-id>        — freeze manifest to run-state
 //   register <kb_id>         — register a single file (alt to scan)
+//
+// H.8.0 — tier-aware loading. Pattern docs in kb/architecture/ have a
+// 3-tier structure: Summary (5-line dense bullets) / Quick Reference
+// (30-50 line mid-density) / Full content (comprehensive prose). The
+// new subcommands extract specific tiers so kb_scope injection can use
+// the right size for each task. Per `_NOTES.md` measurement: tier-aware
+// retrieval saves ~91% on average injection size (frequency-weighted).
+//
+// Graceful fallback: if a doc has no `## Quick Reference` section,
+// `cat-quick-ref` falls back to just the `## Summary` section. If a
+// doc has no `## Summary` section, both tier subcommands fall back to
+// full body content (for backwards compat with older kb docs).
 
 const fs = require('fs');
 const path = require('path');
@@ -145,6 +159,88 @@ function cmdCat(args) {
   if (!kbId) { console.error('Usage: cat <kb_id>'); process.exit(1); }
   const doc = loadDoc(kbId);
   if (!doc) { console.error(`Not found: ${kbId}`); process.exit(1); }
+  process.stdout.write(doc.body);
+  if (!doc.body.endsWith('\n')) process.stdout.write('\n');
+}
+
+/**
+ * Extract a contiguous range of H2 sections from a doc body.
+ *
+ * Sections are bounded by `^## ` markers. Returns body content from the
+ * START marker through the line BEFORE the END marker (exclusive). The
+ * START section is included; the END section is not.
+ *
+ * Example: extractSections(body, 'Summary', 'Intent') returns text from
+ * `## Summary` through the line before `## Intent`.
+ *
+ * @param {string} body - Doc body (post-frontmatter)
+ * @param {string} startName - H2 heading name marking start (without `## `)
+ * @param {string} endName - H2 heading name marking end (without `## `); pass null to extract through next H2 of any name
+ * @returns {string|null} Extracted section text, or null if startName not found
+ */
+function extractSections(body, startName, endName) {
+  const lines = body.split('\n');
+  const escapeRegExp = (s) => s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+  const startRe = new RegExp(`^## ${escapeRegExp(startName)}\\b`);
+  const endRe = endName ? new RegExp(`^## ${escapeRegExp(endName)}\\b`) : /^## /;
+  let startIdx = -1;
+  for (let i = 0; i < lines.length; i++) {
+    if (startRe.test(lines[i])) { startIdx = i; break; }
+  }
+  if (startIdx === -1) return null;
+  let endIdx = lines.length;
+  for (let i = startIdx + 1; i < lines.length; i++) {
+    if (endRe.test(lines[i])) { endIdx = i; break; }
+  }
+  return lines.slice(startIdx, endIdx).join('\n').trimEnd() + '\n';
+}
+
+function cmdCatSummary(args) {
+  const kbId = args._[0];
+  if (!kbId) { console.error('Usage: cat-summary <kb_id>'); process.exit(1); }
+  const doc = loadDoc(kbId);
+  if (!doc) { console.error(`Not found: ${kbId}`); process.exit(1); }
+  // Try Summary → next H2; fall back to full body if no Summary section
+  const summary = extractSections(doc.body, 'Summary', null);
+  if (summary === null) {
+    process.stderr.write(`Warning: ${kbId} has no '## Summary' section; returning full body.\n`);
+    process.stdout.write(doc.body);
+    if (!doc.body.endsWith('\n')) process.stdout.write('\n');
+    return;
+  }
+  process.stdout.write(summary);
+}
+
+function cmdCatQuickRef(args) {
+  const kbId = args._[0];
+  if (!kbId) { console.error('Usage: cat-quick-ref <kb_id>'); process.exit(1); }
+  const doc = loadDoc(kbId);
+  if (!doc) { console.error(`Not found: ${kbId}`); process.exit(1); }
+  // Strategy: if Quick Reference exists, return Summary through end of Quick Reference.
+  // Otherwise, fall back to just Summary (which is what cat-summary returns).
+  const quickRef = extractSections(doc.body, 'Quick Reference', null);
+  if (quickRef !== null) {
+    // Quick Reference exists — emit Summary + Quick Reference together.
+    // Find Summary; Summary should come before Quick Reference.
+    const summary = extractSections(doc.body, 'Summary', 'Quick Reference');
+    if (summary !== null) {
+      process.stdout.write(summary);
+      process.stdout.write(quickRef);
+      return;
+    }
+    // No Summary but Quick Reference exists — unusual; emit just Quick Reference.
+    process.stdout.write(quickRef);
+    return;
+  }
+  // No Quick Reference — fall back to Summary only.
+  const summary = extractSections(doc.body, 'Summary', null);
+  if (summary !== null) {
+    process.stderr.write(`Note: ${kbId} has no '## Quick Reference' section; returning Summary only.\n`);
+    process.stdout.write(summary);
+    return;
+  }
+  // No Summary either — final fallback to full body.
+  process.stderr.write(`Warning: ${kbId} has no '## Summary' or '## Quick Reference' sections; returning full body.\n`);
   process.stdout.write(doc.body);
   if (!doc.body.endsWith('\n')) process.stdout.write('\n');
 }
@@ -315,6 +411,8 @@ const args = parseArgs(process.argv.slice(3));
 
 switch (cmd) {
   case 'cat': cmdCat(args); break;
+  case 'cat-summary': cmdCatSummary(args); break;
+  case 'cat-quick-ref': cmdCatQuickRef(args); break;
   case 'hash': cmdHash(args); break;
   case 'list': cmdList(args); break;
   case 'resolve': cmdResolve(args); break;
@@ -322,14 +420,16 @@ switch (cmd) {
   case 'snapshot': cmdSnapshot(args); break;
   case 'register': cmdRegister(args); break;
   default:
-    console.error('Usage: kb-resolver.js {cat|hash|list|resolve|scan|snapshot|register} [args]');
-    console.error('  cat <kb_id>            — print doc body');
-    console.error('  hash <kb_id>           — print SHA-256 of body');
-    console.error('  list [--tag X]         — list registered KB docs');
-    console.error('  resolve kb:<id>[@<h>]  — resolve a ref string');
-    console.error('  scan                   — walk kb/ tree, refresh manifest');
-    console.error('  snapshot <run-id>      — freeze manifest to run-state');
-    console.error('  register <kb_id>       — register a single file (alt to scan)');
+    console.error('Usage: kb-resolver.js {cat|cat-summary|cat-quick-ref|hash|list|resolve|scan|snapshot|register} [args]');
+    console.error('  cat <kb_id>             — print doc body (Tier 3 — full)');
+    console.error('  cat-summary <kb_id>     — print Summary section only (Tier 1 — cheap)');
+    console.error('  cat-quick-ref <kb_id>   — print Summary + Quick Reference (Tier 2 — mid)');
+    console.error('  hash <kb_id>            — print SHA-256 of body');
+    console.error('  list [--tag X]          — list registered KB docs');
+    console.error('  resolve kb:<id>[@<h>]   — resolve a ref string');
+    console.error('  scan                    — walk kb/ tree, refresh manifest');
+    console.error('  snapshot <run-id>       — freeze manifest to run-state');
+    console.error('  register <kb_id>        — register a single file (alt to scan)');
     console.error('Env: HETS_KB_DIR, HETS_RUN_STATE_DIR override defaults.');
     process.exit(1);
 }

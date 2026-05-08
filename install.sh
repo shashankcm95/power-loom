@@ -813,6 +813,45 @@ SETTINGS_EOF
     failed=$((failed + 1))
   fi
 
+  # Test 41 (H.8.0): kb-resolver cat-summary extracts only Summary section
+  # (Tier 1 — cheap inline injection)
+  local h8_0_summary_result
+  h8_0_summary_result=$(node "$SCRIPT_DIR/scripts/agent-team/kb-resolver.js" cat-summary architecture/crosscut/single-responsibility 2>/dev/null)
+  if echo "$h8_0_summary_result" | grep -q '## Summary' && ! echo "$h8_0_summary_result" | grep -q '## Quick Reference' && ! echo "$h8_0_summary_result" | grep -q '## Intent'; then
+    echo "  ✓ kb-resolver: H.8.0 cat-summary returns only Summary section (Tier 1)"
+    passed=$((passed + 1))
+  else
+    echo "  ✗ kb-resolver: H.8.0 cat-summary should return only Summary, not later sections"
+    failed=$((failed + 1))
+  fi
+
+  # Test 42 (H.8.0): kb-resolver cat-quick-ref extracts Summary + Quick Reference
+  # but stops before Intent (Tier 2 — mid-density injection)
+  local h8_0_quickref_result
+  h8_0_quickref_result=$(node "$SCRIPT_DIR/scripts/agent-team/kb-resolver.js" cat-quick-ref architecture/crosscut/single-responsibility 2>/dev/null)
+  if echo "$h8_0_quickref_result" | grep -q '## Summary' && echo "$h8_0_quickref_result" | grep -q '## Quick Reference' && ! echo "$h8_0_quickref_result" | grep -q '## Intent'; then
+    echo "  ✓ kb-resolver: H.8.0 cat-quick-ref returns Summary + Quick Reference (Tier 2)"
+    passed=$((passed + 1))
+  else
+    echo "  ✗ kb-resolver: H.8.0 cat-quick-ref should return Summary + Quick Reference, not Intent"
+    failed=$((failed + 1))
+  fi
+
+  # Test 43 (H.8.0): kb-resolver cat-quick-ref falls back gracefully on doc
+  # WITHOUT Quick Reference section (older kb docs); returns just Summary +
+  # informational stderr note
+  local h8_0_fallback_stdout
+  local h8_0_fallback_stderr
+  h8_0_fallback_stdout=$(node "$SCRIPT_DIR/scripts/agent-team/kb-resolver.js" cat-quick-ref hets/spawn-conventions 2>/dev/null)
+  h8_0_fallback_stderr=$(node "$SCRIPT_DIR/scripts/agent-team/kb-resolver.js" cat-quick-ref hets/spawn-conventions 2>&1 >/dev/null)
+  if echo "$h8_0_fallback_stdout" | grep -q '## Summary' && ! echo "$h8_0_fallback_stdout" | grep -q '## Quick Reference' && echo "$h8_0_fallback_stderr" | grep -q "no '## Quick Reference'"; then
+    echo "  ✓ kb-resolver: H.8.0 cat-quick-ref falls back to Summary + stderr note when no Quick Reference"
+    passed=$((passed + 1))
+  else
+    echo "  ✗ kb-resolver: H.8.0 cat-quick-ref fallback should return Summary + warn on stderr"
+    failed=$((failed + 1))
+  fi
+
   echo ""
   echo "  Results: $passed passed, $failed failed"
   [ "$failed" -gt 0 ] && echo "  ⚠ Some tests failed — check hook scripts and paths"
