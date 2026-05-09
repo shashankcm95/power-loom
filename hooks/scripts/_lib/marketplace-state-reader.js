@@ -47,6 +47,7 @@ function getMirrorRoot(marketplaceName) {
 function getMirrorHeadTimestamp(mirrorPath) {
   if (!mirrorPath || !fs.existsSync(mirrorPath)) return null;
   try {
+    // Safe: fixed string arguments, no user input. Verified H.8.4 chaos audit.
     const out = execSync('git log -1 --format=%ct', {
       cwd: mirrorPath,
       encoding: 'utf8',
