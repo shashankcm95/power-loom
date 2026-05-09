@@ -119,6 +119,36 @@ node ~/Documents/claude-toolkit/scripts/agent-team/agent-identity.js list | head
 
 If any of these fail, surface the issue and STOP. Don't try to build a team on broken substrate.
 
+### 1.5. Pre-spawn context auto-extension (H.8.5 — wires H.8.3)
+
+Before invoking tech-stack-analyzer (Step 2), build the team-wide spawn-context block via `build-spawn-context.js`. This composes the H.8.x trilogy primitives (architecture-relevance-detector + adr.js touched-by + kb-resolver tier-aware loading) into a structured context block that ALL spawned identities receive as a prefix to their individual persona/task instructions. Substrate-curated kb anchoring + drift-aware ADR injection becomes automatic per spawn.
+
+```bash
+# Optional --files arg if user provides specific paths in $ARGUMENTS;
+# otherwise just task-shaped detection (no ADR matching this run).
+FILES_ARG=""
+if [ -n "${TARGET_FILES:-}" ]; then
+  FILES_ARG="--files \"$TARGET_FILES\""
+fi
+
+# Invoke build-spawn-context. Per ADR-0001, this is fail-open: if the helper
+# errors, SPAWN_CONTEXT becomes empty string and Step 2 proceeds without
+# substrate-curated anchoring (the team still spawns; it just doesn't get
+# the auto-extension prefix).
+SPAWN_CONTEXT=$(node ~/Documents/claude-toolkit/scripts/agent-team/build-spawn-context.js \
+  --task "$TASK_DESCRIPTION" \
+  $FILES_ARG \
+  --format text 2>/dev/null || echo "")
+
+if [ -n "$SPAWN_CONTEXT" ]; then
+  echo "Spawn context auto-extension: $(echo "$SPAWN_CONTEXT" | wc -l) lines of substrate-curated KB+ADR anchoring will prefix each spawn"
+fi
+```
+
+`$SPAWN_CONTEXT` is then forwarded into Step 7's `spawn_implementer` and `spawn_challenger` calls as a prefix prepended to each identity's persona/task block. The chat agent (Claude reading `/build-team`) handles this prepending when emitting each spawn invocation: each identity's prompt becomes `<SPAWN_CONTEXT>\n\n<persona block>\n\n<task block>` rather than `<persona block>\n\n<task block>`.
+
+If `$SPAWN_CONTEXT` is empty (helper errored, or no signals matched, or no ADRs touch the files), spawns proceed without the prefix — substrate degrades gracefully per fail-open discipline. Empty context is a valid output.
+
 ### 2. Invoke the tech-stack-analyzer skill
 Follow the 7-step workflow in `skills/tech-stack-analyzer/SKILL.md`:
 - Step 1: Parse user intent (extract `intent` + `domain` + `constraints`)
@@ -140,7 +170,11 @@ Follow the 7-step workflow in `skills/tech-stack-analyzer/SKILL.md`:
   TIER=$(echo "$REC" | jq -r '.tier')
 
   # 2. Spawn implementer (always, regardless of tier)
-  spawn_implementer "$IDENTITY" "$TASK"   # follows kb:hets/spawn-conventions
+  # H.8.5: $SPAWN_CONTEXT (computed in Step 1.5) is prepended to the spawn prompt
+  # so each implementer gets substrate-curated KB anchoring + active-ADR awareness
+  # before its persona/task block. spawn_implementer's prompt construction follows
+  # the kb:hets/spawn-conventions extended for this prefix.
+  spawn_implementer "$IDENTITY" "$TASK" "$SPAWN_CONTEXT"   # follows kb:hets/spawn-conventions
 
   # H.5.7 — task-type heuristic for contract selection.
   # Honors --task-type explicit override if root provides ($TASK_TYPE_OVERRIDE);
