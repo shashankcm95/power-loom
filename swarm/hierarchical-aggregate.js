@@ -31,6 +31,11 @@
 
 const fs = require('fs');
 const path = require('path');
+// HT.1.2 — `parseFrontmatter` consolidated to canonical helper (was 1 of 4
+// inline copies post-H.8.7 chaos-H4 extraction; the inline version here did
+// not support block lists or digit-bearing keys — canonical supports both).
+// HT.0.9-verify code-reviewer enumerated the 4 sites.
+const { parseFrontmatter } = require('../scripts/agent-team/_lib/frontmatter');
 
 const args = process.argv.slice(2);
 const runId = args[0];
@@ -59,25 +64,6 @@ function autodetectPrevious(currentRunId) {
 }
 
 // === Tree parsing ===
-
-function parseFrontmatter(text) {
-  const fm = {};
-  if (!text.startsWith('---')) return { frontmatter: fm, body: text };
-  const end = text.indexOf('\n---', 3);
-  if (end === -1) return { frontmatter: fm, body: text };
-  const yamlBlock = text.slice(3, end).trim();
-  for (const line of yamlBlock.split('\n')) {
-    const m = line.match(/^([a-zA-Z_]+):\s*(.*)$/);
-    if (!m) continue;
-    let val = m[2].trim();
-    if (val === 'null') val = null;
-    else if (val.startsWith('[') && val.endsWith(']')) {
-      val = val.slice(1, -1).split(',').map((s) => s.trim().replace(/^["']|["']$/g, '')).filter(Boolean);
-    } else val = val.replace(/^["']|["']$/g, '');
-    fm[m[1]] = val;
-  }
-  return { frontmatter: fm, body: text.slice(end + 4).trim() };
-}
 
 function parseFindings(body) {
   const sections = { CRITICAL: [], HIGH: [], MEDIUM: [], LOW: [] };

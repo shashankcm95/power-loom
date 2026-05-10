@@ -31,6 +31,13 @@ const path = require('path');
 // _lib/runState) instead of being duplicated. Same priority chain:
 // env var → cwd → walk-up → hardcoded LAST.
 const { findToolkitRoot } = require('./_lib/toolkit-root');
+// HT.1.2 — `parseFrontmatter` consolidated to canonical helper (was 1 of 4
+// inline copies post-H.8.7 chaos-H4 extraction; the inline version here
+// returned `{ fm: {}, body: text }` (note `fm` field name) while canonical
+// returns `{ frontmatter, body }`. Caller destructuring updated via rename
+// `const { frontmatter: fm } = ...` to keep downstream `fm` usages stable.
+// HT.0.9-verify code-reviewer enumerated the 4 sites.
+const { parseFrontmatter } = require('./_lib/frontmatter');
 
 const TOOLKIT = findToolkitRoot();
 const PATTERNS_DIR = path.join(TOOLKIT, 'skills', 'agent-team', 'patterns');
@@ -52,23 +59,6 @@ const VALID_STATUSES = new Set(['proposed', 'implementing', 'observed', 'active'
 const VALID_SKILL_STATUSES_LITERAL = new Set(['available', 'not-yet-authored']);
 
 // ---------- helpers ----------
-
-function parseFrontmatter(text) {
-  if (!text.startsWith('---')) return { fm: {}, body: text };
-  const end = text.indexOf('\n---', 3);
-  if (end === -1) return { fm: {}, body: text };
-  const fm = {};
-  for (const line of text.slice(3, end).split('\n')) {
-    const m = line.match(/^([a-zA-Z_]+):\s*(.*)$/);
-    if (!m) continue;
-    let v = m[2].trim().replace(/^["']|["']$/g, '');
-    if (v.startsWith('[') && v.endsWith(']')) {
-      v = v.slice(1, -1).split(',').map((s) => s.trim().replace(/^["']|["']$/g, '')).filter(Boolean);
-    }
-    fm[m[1]] = v;
-  }
-  return { fm, body: text.slice(end + 4).trim() };
-}
 
 function listPatternFiles() {
   if (!fs.existsSync(PATTERNS_DIR)) return [];
@@ -119,7 +109,7 @@ validators['pattern-status-frontmatter'] = function () {
   const violations = [];
   for (const { name, path: fp } of listPatternFiles()) {
     const text = fs.readFileSync(fp, 'utf8');
-    const { fm } = parseFrontmatter(text);
+    const { frontmatter: fm } = parseFrontmatter(text);
     if (!fm.status) {
       violations.push({ kind: 'missing-status', file: fp, pattern: name });
       continue;
@@ -144,7 +134,7 @@ validators['pattern-status-readme-consistency'] = function () {
   }
   const readmeStatuses = parseStatusTable(fs.readFileSync(PATTERNS_README, 'utf8'));
   for (const { name, path: fp } of listPatternFiles()) {
-    const { fm } = parseFrontmatter(fs.readFileSync(fp, 'utf8'));
+    const { frontmatter: fm } = parseFrontmatter(fs.readFileSync(fp, 'utf8'));
     if (!fm.status) continue;
     const readmeStatus = readmeStatuses.get(name);
     if (readmeStatus === undefined) {
@@ -175,7 +165,7 @@ validators['pattern-status-skill-md-consistency'] = function () {
   }
   const skillStatuses = parseStatusTable(fs.readFileSync(SKILL_MD, 'utf8'));
   for (const { name, path: fp } of listPatternFiles()) {
-    const { fm } = parseFrontmatter(fs.readFileSync(fp, 'utf8'));
+    const { frontmatter: fm } = parseFrontmatter(fs.readFileSync(fp, 'utf8'));
     if (!fm.status) continue;
     const skillStatus = skillStatuses.get(name);
     if (skillStatus === undefined) {
@@ -198,7 +188,7 @@ validators['pattern-related-bidirectional'] = function () {
   const violations = [];
   const relatedMap = new Map();
   for (const { name, path: fp } of listPatternFiles()) {
-    const { fm } = parseFrontmatter(fs.readFileSync(fp, 'utf8'));
+    const { frontmatter: fm } = parseFrontmatter(fs.readFileSync(fp, 'utf8'));
     const related = Array.isArray(fm.related) ? fm.related : (fm.related ? [fm.related] : []);
     relatedMap.set(name, new Set(related));
   }

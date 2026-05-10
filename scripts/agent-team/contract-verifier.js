@@ -13,6 +13,13 @@
 
 const fs = require('fs');
 const path = require('path');
+// HT.1.2 — `parseFrontmatter` consolidated to canonical helper (was 1 of 4
+// inline copies post-H.8.7 chaos-H4 extraction; the inline version here
+// returned `null` on no-frontmatter while canonical returns
+// `{frontmatter:{}, body:text}`. Caller code at the call site updated to
+// the canonical shape; semantically identical for documentary outputs.
+// HT.0.9-verify code-reviewer enumerated the 4 sites.
+const { parseFrontmatter } = require('./_lib/frontmatter');
 const { spawnSync } = require('child_process');
 
 function parseArgs(argv) {
@@ -38,21 +45,13 @@ if (!args.contract || !args.output) {
 const contract = JSON.parse(fs.readFileSync(args.contract, 'utf8'));
 const output = fs.readFileSync(args.output, 'utf8');
 
-function parseFrontmatter(text) {
-  if (!text.startsWith('---')) return null;
-  const end = text.indexOf('\n---', 3);
-  if (end === -1) return null;
-  const fm = {};
-  for (const line of text.slice(3, end).split('\n')) {
-    const m = line.match(/^([a-zA-Z_]+):\s*(.*)$/);
-    if (m) fm[m[1]] = m[2].trim().replace(/^["']|["']$/g, '');
-  }
-  return { frontmatter: fm, body: text.slice(end + 4).trim() };
-}
-
-const parsed = parseFrontmatter(output);
-const body = parsed ? parsed.body : output;
-const frontmatter = parsed ? parsed.frontmatter : {};
+// HT.1.2 — caller simplified from `parsed ? parsed.body : output` ternary
+// pattern (the inline copy returned `null` on no-frontmatter; canonical
+// always returns `{frontmatter:{}, body:text}` so the ternary becomes
+// straight destructuring). Semantically identical: when no frontmatter
+// present, `body === text === output`; when present, `body` is the post-
+// `---` trimmed text — same as the original.
+const { frontmatter, body } = parseFrontmatter(output);
 
 function countFindings(text) {
   const sections = text.match(/^##\s+(?:🔴|🟠|🟡|🔵)?\s*(CRITICAL|HIGH|MEDIUM|LOW)\b/gim) || [];
