@@ -19,10 +19,22 @@
 // Stale-lock recovery: if the lock file holds a PID that's no longer alive,
 // the wait loop unlinks it and retries. Same logic as the original
 // agent-identity implementation.
+//
+// HT.2.3 (drift-note 75): acquireLock auto-creates the lockfile parent dir
+// via `fs.mkdirSync({ recursive: true })` per substrate's lazy-mkdir
+// convention (session-end-nudge.js:62 + saveState:125 + pattern-recorder.js:49
+// precedents). Closes the opaque-3-sec-timeout-on-ENOENT failure mode that
+// HT.1.14 test 77 ephemeral-tmpdir fixture surfaced. Transparent for all
+// 10 current production consumers (whose parent dirs are pre-created at
+// install); enables future ephemeral-tmpdir tests to "just work".
 
 const fs = require('fs');
+const path = require('path');
 
 function acquireLock(lockPath, opts) {
+  // HT.2.3: lazy parent-dir creation (drift-note 75) per substrate convention.
+  // Recursive mode is idempotent fast-path when dir exists (sub-millisecond stat).
+  fs.mkdirSync(path.dirname(lockPath), { recursive: true });
   const maxWaitMs = (opts && opts.maxWaitMs) || 3000;
   const sleepMs = (opts && opts.sleepMs) || 50;
   const start = Date.now();

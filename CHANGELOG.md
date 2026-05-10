@@ -8,6 +8,86 @@ For granular per-phase detail, see annotated tags `phase-H.x.y` and `swarm/H.x.y
 
 ---
 
+## [unreleased] — 2026-05-10 — HT.2.3 hooks-discipline-edge sweep (drift-notes 67 + 75 closed; third HT.2 sub-phase; per-phase pre-approval UNCONDITIONAL)
+
+**HT.2 third sub-phase. Per-phase pre-approval gate INVOKED UNCONDITIONALLY per architect HIGH-2 absorption at HT.2.0 (option-axis design surface trigger on BOTH Part A + Part B).** Closes 2 hooks-discipline-edge drift-notes via Part A `_lib/lock.js` lazy parent-dir auto-creation + Part B `session-end-nudge.js` migration from inline lock primitive to shared `_lib/lock.js` primitives. **No plugin manifest bump** per architect HIGH-A1 absorption (pure-internal-refactor — Option A2 transparent + Option B2 no API surface; HT.1.10/HT.1.12/HT.1.14/HT.1.15 + HT.2.1 precedent).
+
+### What landed
+
+- **Part A — `_lib/lock.js` lazy parent-dir auto-creation (drift-note 75)**:
+  - Added `const path = require('path');` at top of `scripts/agent-team/_lib/lock.js`
+  - Inserted `fs.mkdirSync(path.dirname(lockPath), { recursive: true });` at top of `acquireLock` body (line 38 post-edit)
+  - Closes opaque-3-sec-timeout-on-ENOENT failure mode that HT.1.14 test 77 ephemeral-tmpdir fixture surfaced
+  - Transparent for all 10 production consumers (parent dirs pre-created at install); enables future ephemeral-tmpdir tests to "just work"
+
+- **Part B — `session-end-nudge.js` migration (drift-note 67)**:
+  - Deleted lines 28-95 (LOCK_STALE_MS constant + sleepMs Atomics.wait helper + inline acquireLock with mtime-based stale detection + inline releaseLock; 68 LoC total)
+  - Preserved lines 22-27 (hook-logic constants including `LOCK_FILE` line 26 + `LOCK_TIMEOUT_MS` line 27)
+  - Added `const { acquireLock, releaseLock } = require('../../scripts/agent-team/_lib/lock');` (first cross-tree relative require in hooks/scripts/)
+  - Updated 2 call sites: `acquireLock()` → `acquireLock(LOCK_FILE, { maxWaitMs: LOCK_TIMEOUT_MS })`; `releaseLock()` → `releaseLock(LOCK_FILE)`
+  - Preserved hook fail-soft contract per ADR-0001 + ADR-0003 (lock_timeout → log + write input + return; no exit-2 — `acquireLock` returns false on timeout)
+  - Replaced mtime-based 10s stale floor with PID-based instant reclamation from `_lib/lock.js` (strictly better for crashed-holder case)
+
+- **9 NEW asserts in `_h70-test.js` Section 9** across 4 logical tests:
+  - Test 1: acquireLock auto-creates missing parent dir (3 asserts; Part A regression guard)
+  - Test 2: acquireLock + releaseLock round-trip against pre-existing tmpdir (3 asserts; Part B drop-in verification)
+  - Test 3: acquireLock returns false on timeout when held by live child PID (2 asserts; fail-soft contract verification — spawn `sleep 10` child for signable live PID)
+  - Test 4: withLock regression for substrate-script consumers (1 assert; Part A doesn't break existing 9-consumer surface)
+
+- **2 NEW install.sh smoke tests** in `tests/smoke-ht.sh`:
+  - Test 78: session-end-nudge.js Stop event with absent sessions/ dir auto-creates (Part A integration; implicitly covers first cross-tree require resolution)
+  - Test 79: session-end-nudge.js fail-soft on lock contention (deterministic stale-PID approach via background `sleep 10`; verified at 2s elapsed in 1-5s range; `wait` exit-143 absorbed via `|| true` under `set -euo pipefail`)
+
+### Per-phase pre-approval gate — 13 FLAGs absorbed single-pass
+
+- **Architect** (APPROVED-with-revisions): 2 HIGH + 4 MEDIUM + 2 LOW
+- **Code-reviewer** (APPROVED-with-revisions): 2 HIGH + 3 MEDIUM + 3 LOW
+- **Convergent FLAGs**: manifest bump rationale (architect HIGH-A1 + code-reviewer MEDIUM-CR2 → resolved via DROP); test 79 scaffolding (architect MEDIUM-A3 + code-reviewer LOW-CR3 → resolved via stale-PID determinism)
+- **Critical empirical catches**: code-reviewer HIGH-CR1 corrected delete range from 22-95 to 28-95 (preserves `LOCK_FILE` constant needed by migrated call site); code-reviewer HIGH-CR2 corrected consumer count from 8 to 10 (added missing `self-improve-store.js` + `prompt-pattern-store.js`)
+
+### drift-notes 67 + 75 RESOLVED-by-implementation
+
+drift-note 67 (HT.1.8 surface): inline lock primitive divergence — RESOLVED via Part B migration to shared primitives.
+drift-note 75 (HT.1.14 surface): opaque 3-sec timeout on ENOENT — RESOLVED via Part A auto-mkdir.
+
+### Empirical pre-validation pattern — 11-phase confirmed
+
+`_lib/lock.js` + `session-end-nudge.js` live state read BEFORE sub-plan flipped draft → approved. Sibling-cohort pattern with HT.1.8-1.15 + HT.2.1 + HT.2.2.
+
+### Forbidden-phrase grep gate
+
+Sub-plan grep returned 6 matches all within plan-mode prescriptive language carve-out per HT.1.3 / HT.2.0 / HT.2.1 / HT.2.2 precedent. Sub-plan PASSES.
+
+### Methodology
+
+Per-phase pre-approval UNCONDITIONAL per architect HIGH-2 at HT.2.0 (option-axis design surface trigger; not "fresh design" alone). ~13 FLAGs absorbed single-pass; status flipped draft → approved post-absorption.
+
+### Verification
+
+- **install.sh smoke**: 75/75 (was 73/73; +2 HT.2.3 tests 78 + 79)
+- **_h70-test.js asserts**: 63/63 (was 54/54; +9 HT.2.3 Section 9 asserts across 4 logical tests)
+- **contracts-validate.js violations**: 16 baseline only (no regression)
+
+### Plugin manifest
+
+`1.12.1` UNCHANGED per architect HIGH-A1 absorption — pure-internal-refactor (Option A2 transparent + Option B2 no API surface). HT.2.0 master plan's "API extension" rationale anticipated Option B1 (which was rejected); the pure-doc no-bump distinction preserved per HT.1.10/HT.1.12/HT.1.14/HT.1.15 + HT.2.1 precedent.
+
+### Wallclock
+
+~120 min end-to-end (sub-plan + empirical pre-validation ~30 min + parallel pre-approval gate + FLAG absorption ~45 min + Part A + Part B implementation + tests ~30 min + verification + cutover ~15 min).
+
+### Pattern-level observations
+
+- **Per-phase pre-approval gate load-bearing value**: code-reviewer HIGH-CR1 (broken delete range — would remove `LOCK_FILE` constant) caught at design time; would have produced a broken file if implemented from the draft sub-plan.
+- **4th mid-implementation observability surface in HT.1.8-HT.2.3 cohort**: HT.1.11 JSDoc + HT.1.12 inline-comment + HT.1.13 KB destination + HT.1.14 lockfile-parent-dir + HT.2.3 PID-1-EPERM-trap + set-e-propagation. ALL caught + fixed within ≤10 min via 3-tier verification or test framework.
+- **error-critic.js fail-soft contract upgrade deferred to HT.3 candidate** per architect MEDIUM-A4 reframe — error-critic.js uses `withLock` with no-op fallback (contract upgrade, NOT inline-primitive migration; smaller scope than HT.2.3 Part B).
+
+### Next
+
+HT.2.4 doc-lag sweep (drift-notes 68 + 69; sub-plan-only methodology; mechanical dead-code cleanup of `contracts-validate.js:53 SETTINGS_READER` constant + `settings-reader.js:3` stale active-consumer claim; plugin manifest unchanged per pure-doc convention).
+
+---
+
 ## [1.12.1] — 2026-05-10 — HT.2.2 parseFrontmatter YAML 1.2 inline-comment strip (drift-note 73 closed; parser-discipline-edge HT.2.2 second HT.2 sub-phase)
 
 **HT.2 second sub-phase. Sub-plan-only methodology per HT.2 master plan methodology table line 328 (mechanical YAML 1.2 spec compliance; no fresh design surface; chaos-test mitigates regression risk).** Extends `scripts/agent-team/_lib/frontmatter.js parseFrontmatter` to honor YAML 1.2 §9.1.6 inline `#` comment semantics. **Plugin manifest patch bump 1.12.0 → 1.12.1** per code-reviewer HIGH-2 absorption at HT.2.0 (consumer-visible parser API behavior change — frontmatter inline `#` semantics change from "preserved as literal" to "YAML 1.2-spec comment-strip"; preserves pure-doc no-bump distinction per HT.1.10/HT.1.12/HT.1.14/HT.1.15 — HT.2.2 is NOT pure-doc since it changes parser behavior).

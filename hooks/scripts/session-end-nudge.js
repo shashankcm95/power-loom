@@ -10,6 +10,14 @@
 // to fire MULTIPLE times. This is the same race fixed earlier in
 // prompt-pattern-store.js — applied here for the same reason.
 //
+// HT.2.3 (drift-note 67): migrated from inline lock primitive (67 LoC at
+// lines 22-95) to `_lib/lock.js` shared primitives (`acquireLock` +
+// `releaseLock`). Preserves hook fail-soft contract per ADR-0001 +
+// ADR-0003 (lock_timeout → log + write input + return; no exit-2). The
+// shared primitive uses PID-based stale-recovery instead of mtime-based
+// 10s floor — strictly better for the crashed-holder case. First
+// cross-tree relative require in hooks/scripts/ (`../../scripts/...`).
+//
 // Configuration:
 //   CLAUDE_SESSION_NUDGE_THRESHOLD=10  default = 10 responses
 
@@ -17,6 +25,7 @@ const fs = require('fs');
 const path = require('path');
 const os = require('os');
 const { log: makeLogger } = require('./_log.js');
+const { acquireLock, releaseLock } = require('../../scripts/agent-team/_lib/lock');
 const log = makeLogger('session-end-nudge');
 
 const NUDGE_THRESHOLD = parseInt(process.env.CLAUDE_SESSION_NUDGE_THRESHOLD || '10', 10);
@@ -25,74 +34,6 @@ const STATE_DIR = path.join(os.homedir(), '.claude', 'sessions');
 const STATE_FILE = path.join(STATE_DIR, `nudge-${SESSION_ID}.json`);
 const LOCK_FILE = STATE_FILE + '.lock';
 const LOCK_TIMEOUT_MS = 2000;
-const LOCK_STALE_MS = 10000;
-
-/**
- * Sleep for the given number of milliseconds. Prefers `Atomics.wait` (true
- * sleep) when available; falls back to a busy-wait spin loop. Used in the
- * lock-acquisition retry loop.
- *
- * @param {number} ms Milliseconds to sleep
- * @returns {void}
- */
-function sleepMs(ms) {
-  try {
-    if (typeof SharedArrayBuffer === 'function' && typeof Atomics?.wait === 'function') {
-      Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, ms);
-      return;
-    }
-  } catch { /* fallthrough */ }
-  const end = Date.now() + ms;
-  while (Date.now() < end) { /* spin */ }
-}
-
-/**
- * Acquire the per-session state-file lock with stale-lock recovery.
- * Uses the `wx` flag for atomic create-if-not-exists semantics. On
- * EEXIST, checks the lock's mtime: if older than `LOCK_STALE_MS` (10s),
- * the lock is reclaimed (assumes prior holder crashed or hung). Retries
- * with exponential backoff until `LOCK_TIMEOUT_MS` (2s) elapses.
- *
- * Mirrors the same race-fix pattern from `prompt-pattern-store.js` and
- * the H.3.2 `_lib/lock.js` primitive.
- *
- * @returns {boolean} true if lock acquired, false on timeout
- */
-function acquireLock() {
-  fs.mkdirSync(STATE_DIR, { recursive: true });
-  const start = Date.now();
-  let backoff = 10;
-  while (Date.now() - start < LOCK_TIMEOUT_MS) {
-    try {
-      const fd = fs.openSync(LOCK_FILE, 'wx');
-      fs.writeSync(fd, JSON.stringify({ pid: process.pid, t: Date.now() }));
-      fs.closeSync(fd);
-      return true;
-    } catch (err) {
-      if (err.code !== 'EEXIST') throw err;
-      try {
-        const stat = fs.statSync(LOCK_FILE);
-        if (Date.now() - stat.mtimeMs > LOCK_STALE_MS) {
-          try { fs.unlinkSync(LOCK_FILE); } catch { /* beaten — fine */ }
-        }
-      } catch { /* vanished — retry */ }
-      sleepMs(Math.min(backoff, 100));
-      backoff *= 2;
-    }
-  }
-  return false;
-}
-
-/**
- * Release the per-session state-file lock. Idempotent — silently ignores
- * "already released" cases (lock file may have been reclaimed by stale-lock
- * recovery during a long-running operation).
- *
- * @returns {void}
- */
-function releaseLock() {
-  try { fs.unlinkSync(LOCK_FILE); } catch { /* gone — fine */ }
-}
 
 /**
  * Load the per-session nudge state from disk. Returns a fresh state on
@@ -137,7 +78,9 @@ process.stdin.on('data', (chunk) => { input += chunk; });
 process.stdin.on('end', () => {
   // If lock acquisition fails (>2s contention), pass through silently.
   // The count may be slightly off, but the user's response still ships.
-  const haveLock = acquireLock();
+  // HT.2.3: uses `_lib/lock.js` shared primitives; hook fail-soft contract
+  // preserved per ADR-0001 + ADR-0003 — acquireLock returns false on timeout.
+  const haveLock = acquireLock(LOCK_FILE, { maxWaitMs: LOCK_TIMEOUT_MS });
   if (!haveLock) {
     log('lock_timeout', { timeout_ms: LOCK_TIMEOUT_MS });
     process.stdout.write(input);
@@ -161,6 +104,6 @@ process.stdin.on('end', () => {
     log('counted', { count: state.count, nudged: state.nudged });
     process.stdout.write(input);
   } finally {
-    releaseLock();
+    releaseLock(LOCK_FILE);
   }
 });

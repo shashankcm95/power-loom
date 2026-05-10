@@ -711,6 +711,99 @@ assertEqual(
   'HT.2.2 strip: # not preceded by whitespace → literal (no strip)'
 );
 
+// ===== Section 9: HT.2.3 _lib/lock.js hooks-discipline-edge fixes (4 tests) =====
+//
+// Added in HT.2.3 (drift-notes 67 + 75). Verifies:
+//   - acquireLock auto-creates missing lockfile parent dir (Part A; drift-note 75)
+//   - acquireLock returns true on success against ephemeral tmpdir (Part A regression)
+//   - acquireLock + releaseLock round-trip (Part B drop-in for session-end-nudge.js)
+//   - withLock still works for substrate-script consumers (regression check that
+//     Part A's auto-mkdir doesn't break the existing 9-script consumer surface)
+
+console.log('\n[9] HT.2.3 _lib/lock.js hooks-discipline-edge fixes (4 tests)');
+
+const lockLib = require('./_lib/lock');
+
+// Test 1: acquireLock auto-creates missing lockfile parent dir (Part A; drift-note 75)
+const lockTest1Dir = path.join(os.tmpdir(), `ht23-lock-test-1-${process.pid}`);
+const lockTest1Path = path.join(lockTest1Dir, 'subdir-also-missing', 'test.lock');
+// Verify parent dir does NOT exist before
+assert(
+  !fs.existsSync(path.dirname(lockTest1Path)),
+  'HT.2.3 Part A pre-check: lockfile parent dir does not exist before acquireLock'
+);
+const lockTest1Result = lockLib.acquireLock(lockTest1Path, { maxWaitMs: 100 });
+assert(
+  lockTest1Result === true,
+  'HT.2.3 Part A: acquireLock auto-creates missing parent dir + acquires lock (returns true)'
+);
+assert(
+  fs.existsSync(path.dirname(lockTest1Path)),
+  'HT.2.3 Part A: lockfile parent dir exists after acquireLock (auto-mkdir confirmed)'
+);
+lockLib.releaseLock(lockTest1Path);
+try { fs.rmSync(lockTest1Dir, { recursive: true, force: true }); } catch {}
+
+// Test 2: acquireLock + releaseLock round-trip against pre-existing tmpdir (Part B drop-in)
+const lockTest2Dir = path.join(os.tmpdir(), `ht23-lock-test-2-${process.pid}`);
+fs.mkdirSync(lockTest2Dir, { recursive: true });
+const lockTest2Path = path.join(lockTest2Dir, 'state.lock');
+const lockTest2Acquire = lockLib.acquireLock(lockTest2Path, { maxWaitMs: 100 });
+assert(
+  lockTest2Acquire === true,
+  'HT.2.3 Part B drop-in: acquireLock returns true on success against pre-existing parent dir'
+);
+assert(
+  fs.existsSync(lockTest2Path),
+  'HT.2.3 Part B drop-in: lockfile present after acquire'
+);
+lockLib.releaseLock(lockTest2Path);
+assert(
+  !fs.existsSync(lockTest2Path),
+  'HT.2.3 Part B drop-in: lockfile removed after releaseLock (idempotent unlink)'
+);
+try { fs.rmSync(lockTest2Dir, { recursive: true, force: true }); } catch {}
+
+// Test 3: acquireLock returns false on timeout against held-by-live-child-PID (fail-soft contract)
+// NOTE: must use a CHILD process PID (not PID 1 / launchd) because process.kill(1, 0) from a
+// regular user throws EPERM which `_lib/lock.js` treats as "pid gone" → reclaims. A spawned
+// child sleep is signable + alive → process.kill(childPid, 0) succeeds → lock is treated as
+// held → acquireLock waits until maxWaitMs → returns false.
+const { spawn: spawnLockChild } = require('child_process');
+const lockTest3Dir = path.join(os.tmpdir(), `ht23-lock-test-3-${process.pid}`);
+fs.mkdirSync(lockTest3Dir, { recursive: true });
+const lockTest3Path = path.join(lockTest3Dir, 'held.lock');
+const lockTest3Child = spawnLockChild('sleep', ['10'], { stdio: 'ignore', detached: false });
+fs.writeFileSync(lockTest3Path, String(lockTest3Child.pid));
+const lockTest3Start = Date.now();
+const lockTest3Result = lockLib.acquireLock(lockTest3Path, { maxWaitMs: 150, sleepMs: 50 });
+const lockTest3Elapsed = Date.now() - lockTest3Start;
+lockTest3Child.kill('SIGTERM');
+assert(
+  lockTest3Result === false,
+  'HT.2.3 fail-soft contract: acquireLock returns false on timeout when held by live PID'
+);
+assert(
+  lockTest3Elapsed >= 100 && lockTest3Elapsed < 500,
+  `HT.2.3 fail-soft contract: timeout respects maxWaitMs (got ${lockTest3Elapsed}ms; expected 100-500ms)`
+);
+try { fs.unlinkSync(lockTest3Path); } catch {}
+try { fs.rmSync(lockTest3Dir, { recursive: true, force: true }); } catch {}
+
+// Test 4: withLock regression — Part A's auto-mkdir doesn't break existing substrate-script consumers
+const lockTest4Dir = path.join(os.tmpdir(), `ht23-lock-test-4-${process.pid}`, 'auto-created-by-withLock');
+const lockTest4Path = path.join(lockTest4Dir, 'state.lock');
+let withLockFnRan = false;
+const withLockReturn = lockLib.withLock(lockTest4Path, () => {
+  withLockFnRan = true;
+  return 'withLock-returned-value';
+}, { maxWaitMs: 100 });
+assert(
+  withLockFnRan && withLockReturn === 'withLock-returned-value',
+  'HT.2.3 regression: withLock still works for substrate-script consumers (auto-mkdir transparent)'
+);
+try { fs.rmSync(path.dirname(lockTest4Dir), { recursive: true, force: true }); } catch {}
+
 // ===== Summary =====
 
 console.log(`\n=== Summary ===`);

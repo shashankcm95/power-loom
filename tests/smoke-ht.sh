@@ -246,6 +246,72 @@ EOF
     failed=$((failed + 1))
   fi
 
+  # Test 78: HT.2.3 — session-end-nudge.js Stop event with absent sessions/ dir auto-creates
+  # (drift-note 75 closure via _lib/lock.js Part A auto-mkdir). Validates:
+  #   (a) require resolution across hooks/scripts/ → ../../scripts/agent-team/_lib/lock works
+  #       (first cross-tree relative require in hooks/scripts/ per code-reviewer MEDIUM-CR3)
+  #   (b) auto-mkdir creates ~/.claude/sessions/ transparently (Part A behavior)
+  #   (c) hook exits 0 + writes stdin through to stdout (fail-soft contract preserved)
+  #   (d) state file is written with count=1
+  echo -n "  Test 78 (HT.2.3 session-end-nudge.js auto-mkdir on absent sessions/ dir): "
+  T78_TMPDIR=$(mktemp -d)
+  # Note: do NOT pre-create $T78_TMPDIR/.claude/sessions — that's what we're testing
+  T78_OUT=$(echo "input-line-1" | HOME="$T78_TMPDIR" CLAUDE_SESSION_ID=t78-test \
+    node "$SCRIPT_DIR/hooks/scripts/session-end-nudge.js" 2>/dev/null)
+  T78_EXIT=$?
+  T78_STATE_FILE="$T78_TMPDIR/.claude/sessions/nudge-t78-test.json"
+  T78_COUNT=$(python3 -c "import json; print(json.load(open('$T78_STATE_FILE')).get('count', -1))" 2>/dev/null)
+  if [ "$T78_EXIT" = "0" ] && [ "$T78_OUT" = "input-line-1" ] && [ "$T78_COUNT" = "1" ]; then
+    echo "OK (exit=0, stdout=input, auto-mkdir created sessions/ + state file count=1)"
+    passed=$((passed + 1))
+  else
+    echo "FAIL: exit=$T78_EXIT, stdout=$T78_OUT, count=$T78_COUNT"
+    failed=$((failed + 1))
+  fi
+  rm -rf "$T78_TMPDIR"
+
+  # Test 79: HT.2.3 — session-end-nudge.js fail-soft contract on lock contention
+  # (drift-note 67 closure via _lib/lock.js Part B migration). Validates:
+  #   (a) When lock is held by a live PID (background sleep), acquireLock times out
+  #   (b) Hook exits 0 (NOT exit-2 — fail-soft per ADR-0001 + ADR-0003)
+  #   (c) Hook writes stdin through to stdout (fail-soft pass-through preserved)
+  # Approach: pre-create lockfile with a live child sleep PID (child process owned
+  # by the test; signable via process.kill(pid, 0) → succeeds → lock treated as held).
+  # Stale-PID approach (write garbage to lockfile) won't work because _lib/lock.js
+  # reclaims invalid/dead PIDs immediately; only a LIVE signable PID forces timeout.
+  echo -n "  Test 79 (HT.2.3 session-end-nudge.js fail-soft on lock contention): "
+  T79_TMPDIR=$(mktemp -d)
+  mkdir -p "$T79_TMPDIR/.claude/sessions"
+  T79_LOCK="$T79_TMPDIR/.claude/sessions/nudge-t79-test.json.lock"
+  sleep 10 &
+  T79_CHILD_PID=$!
+  echo "$T79_CHILD_PID" > "$T79_LOCK"
+  T79_START=$(date +%s)
+  T79_OUT=$(echo "input-line-2" | HOME="$T79_TMPDIR" CLAUDE_SESSION_ID=t79-test \
+    CLAUDE_SESSION_NUDGE_THRESHOLD=10 \
+    node "$SCRIPT_DIR/hooks/scripts/session-end-nudge.js" 2>/dev/null)
+  T79_EXIT=$?
+  T79_END=$(date +%s)
+  T79_ELAPSED=$((T79_END - T79_START))
+  # kill + wait must tolerate killed-child exit codes under `set -euo pipefail`:
+  # `wait` on a killed child returns 128+SIGNAL (143 for SIGTERM); `|| true`
+  # absorbs that exit code so the test framework continues.
+  kill $T79_CHILD_PID 2>/dev/null || true
+  wait $T79_CHILD_PID 2>/dev/null || true
+  # Note: state file should NOT have been mutated (lock acquisition failed)
+  T79_STATE_FILE="$T79_TMPDIR/.claude/sessions/nudge-t79-test.json"
+  T79_STATE_EXISTS=$([ -e "$T79_STATE_FILE" ] && echo "yes" || echo "no")
+  if [ "$T79_EXIT" = "0" ] && [ "$T79_OUT" = "input-line-2" ] && \
+     [ "$T79_ELAPSED" -ge 1 ] && [ "$T79_ELAPSED" -le 5 ] && \
+     [ "$T79_STATE_EXISTS" = "no" ]; then
+    echo "OK (exit=0, stdout=input, elapsed=${T79_ELAPSED}s in 1-5s range, no state mutation on timeout)"
+    passed=$((passed + 1))
+  else
+    echo "FAIL: exit=$T79_EXIT, stdout=$T79_OUT, elapsed=${T79_ELAPSED}s, state_exists=$T79_STATE_EXISTS"
+    failed=$((failed + 1))
+  fi
+  rm -rf "$T79_TMPDIR"
+
   # Test 65: H.8.7 — adr.js symlink defense (chaos M3)
   echo -n "  Test 65 (H.8.7 adr.js symlink defense; symlink in ADRS_DIR ignored): "
   T65_TMPDIR=$(mktemp -d)
