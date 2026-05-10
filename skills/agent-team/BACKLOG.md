@@ -78,6 +78,73 @@ ADR institutional weight is appropriate when the decision is forward-looking + c
 
 Per HT.0.9-verify FLAG-5 right-sizing, this is the first of 3 lightweight BACKLOG entries planned across HT.1 (HT.1.6 + HT.1.12 deferred-author-intent precedent + HT.1.15 helper-deletion canonical pattern).
 
+## Phase HT.1.12 — Architecture KB forward-reference resolution / deferred-author-intent shape — DECISION RECORD (lightweight)
+
+**Status**: shipped 2026-05-10. Second `decision-record-pattern: lightweight` entry in BACKLOG.md per HT.1.6 declaration (line 79: "first of 3 lightweight BACKLOG entries planned across HT.1 — HT.1.6 + HT.1.12 + HT.1.15"). Closes HT.0.5a E.1 most-weighty finding (bidirectional `related:` validator skips broken refs because targets don't exist).
+
+### Deferred-author-intent shape
+
+Architecture KB docs reference forward `kb_id` targets in their `related:` graph that are planned but not yet authored. The substrate's bidirectional validator (`pattern-related-bidirectional` at `contracts-validate.js:187`; pattern files only) skips refs whose targets aren't registered — silently. Forward references therefore have no active enforcement surface.
+
+**Two encoding shapes used in the substrate**:
+
+| Shape | Where | When |
+|-------|-------|------|
+| (a) Body-section listing under `## Related KB docs (planned, not yet authored)` H2 with `kb:<id>` references + plain-English description | Architecture KBs with existing `related:` frontmatter graphs (10 docs in `kb/architecture/**`) | When a doc has authored `related:` peers AND planned-but-unauthored peers; the body section co-locates the deferred-author-intent annotation with the doc's content |
+| (b) Body-section listing under `### Related KB docs (planned)` H3 with `kb:<id>` references | KBs without frontmatter `related:` (e.g., `web-dev/react-essentials.md`) | When a doc is starter content with no authored peers yet; precedent established in HT.0.5a E.4 |
+
+Shape (a) is the HT.1.12 extension of (b) to architecture KBs. Both forms preserve deferred-author-intent visibly in markdown content; neither pollutes the `related:` frontmatter graph; both are parser-transparent (no schema changes).
+
+**Migration discipline**: when a planned KB is authored, references migrate from the body-section listing INTO the frontmatter `related:` array (and bidirectional partners likewise add the new ref). The body-section listing shrinks as authoring progresses.
+
+### What landed
+
+| Sub-phase | Scope | Key files |
+|-----------|-------|-----------|
+| 1 | Sub-plan + drift-note 72 capture (HT.0.5a count overstated vs empirical) + drift-note 73 capture (parseFrontmatter does not strip YAML inline `#` comments) | `swarm/thoughts/shared/plans/2026-05-10-HT.1.12-kb-forward-refs.md` |
+| 2 | 5 files frontmatter cleanup (broken refs removed from `related:`) + 5 body sections added before `## Phase` | `kb/architecture/ai-systems/rag-anchoring.md` (3 forward refs in body), `kb/architecture/crosscut/deep-modules.md` (1 forward ref), `kb/architecture/crosscut/dependency-rule.md` (1 forward ref), `kb/architecture/discipline/error-handling-discipline.md` (1 forward ref), `kb/architecture/discipline/trade-off-articulation.md` (1 forward ref) |
+| 3 | This BACKLOG.md decision-record-pattern entry | `skills/agent-team/BACKLOG.md` (this section) |
+| 4 | Cutover (no plugin manifest bump per pure-doc convention; HT.1.10 precedent) | `skills/agent-team/SKILL.md`, `CHANGELOG.md`, `swarm/thoughts/shared/HT-state.md` |
+
+### Empirical pre-validation findings
+
+HT-state.md cutover claim: 11 broken refs across 7 of 10 architecture KBs to 8 non-existent kb_id targets.
+
+Empirical reality (HT.1.12): **7 broken refs across 5 of 10 architecture KBs to 5 unique non-existent kb_id targets**:
+
+| Source file | Broken target |
+|-------------|---------------|
+| `architecture/ai-systems/rag-anchoring.md` | `architecture/ai-systems/agent-design` |
+| `architecture/ai-systems/rag-anchoring.md` | `architecture/ai-systems/evaluation-under-nondeterminism` |
+| `architecture/ai-systems/rag-anchoring.md` | `architecture/ai-systems/inference-cost-management` |
+| `architecture/crosscut/deep-modules.md` | `architecture/crosscut/information-hiding` |
+| `architecture/crosscut/dependency-rule.md` | `architecture/crosscut/information-hiding` |
+| `architecture/discipline/error-handling-discipline.md` | `architecture/discipline/refusal-patterns` |
+| `architecture/discipline/trade-off-articulation.md` | `architecture/discipline/refusal-patterns` |
+
+5 unique planned-but-unauthored kb_id targets (sufficient to satisfy 7 forward refs):
+- `architecture/ai-systems/agent-design`
+- `architecture/ai-systems/evaluation-under-nondeterminism`
+- `architecture/ai-systems/inference-cost-management`
+- `architecture/crosscut/information-hiding`
+- `architecture/discipline/refusal-patterns`
+
+**Empirical pre-validation pattern is now 5-phase confirmed** (HT.1.8 + HT.1.9 + HT.1.10 + HT.1.11 + HT.1.12). Pattern delivers consistent value: surfaces drift-notes at sub-plan time before implementation; eliminates plan-vs-reality drift discovery during execution.
+
+### Drift-notes captured during HT.1.12
+
+- **Drift-note 72**: HT.0.5a forward-reference count overstated. Cutover claimed 11 broken refs / 7 of 10 KBs / 8 unique targets; empirical reality is 7 broken refs / 5 of 10 KBs / 5 unique targets. Either original HT.0.5a count miscounted or the architecture tree shape changed between 2026-05-09 audit and 2026-05-10 implementation. HT.2 sweep candidate: re-validate other HT.0.x finding counts against current empirical state.
+- **Drift-note 73**: `parseFrontmatter` (`scripts/agent-team/_lib/frontmatter.js`) does NOT strip YAML inline `#` comments. Per YAML 1.2 spec, parsers SHOULD strip `#` comments outside quoted strings; the toolkit's hand-rolled subset parser does not. Surfaced when initial HT.1.12 attempt at frontmatter inline annotations (`  - architecture/ai-systems/agent-design  # planned`) caused the comment to contaminate the ref-string in `parseFrontmatter` output. Pivoted to body-section migration shape (Approach B). HT.2 sweep candidate: extend parseFrontmatter to strip inline `#` comments per YAML 1.2 (low-risk additive enhancement; chaos-test the change against existing KB + ADR + pattern frontmatter to verify no regression).
+
+### Why lightweight BACKLOG entry vs full ADR
+
+Original HT.1.12 decision (per HT.0.9-verify FLAG-5 right-sizing) was: react-essentials.md precedent already documents the deferred-author-intent shape; codifying it in BACKLOG.md as `decision-record-pattern: lightweight` entry is sufficient. ADR-0004 was proposed in early drafts; downgraded because:
+- The discipline applies to a bounded set (KB doc class only; not cross-cutting to scripts/hooks/contracts)
+- Future expansion is mechanical (more KB docs may use the pattern; same shape applies)
+- The migration discipline (planned → authored → frontmatter migration) is straightforward enough to document in this one entry
+
+Per HT.0.9-verify FLAG-5 right-sizing, this is the second of 3 lightweight BACKLOG entries planned across HT.1 (HT.1.6 documentary persona class + HT.1.12 deferred-author-intent + HT.1.15 helper-deletion canonical pattern).
+
 ## Phase H.8.4 — Shell injection RCE fix + Cyrillic homograph fix + routing rule count correction — SHIPPED
 
 **Status**: shipped. Hot-fix execution by 12-security-engineer.mio in response to chaos run chaos-20260508-191611-h83-trilogy. Pre-approval by 04-architect.mira + 03-code-reviewer.jade with NEEDS-REVISION; revised plan applied.

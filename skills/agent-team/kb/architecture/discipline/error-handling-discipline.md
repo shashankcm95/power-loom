@@ -17,7 +17,6 @@ sources_consulted:
 related:
   - architecture/crosscut/idempotency
   - architecture/crosscut/single-responsibility
-  - architecture/discipline/refusal-patterns
   - architecture/discipline/stability-patterns
 status: active+enforced
 ---
@@ -492,6 +491,12 @@ Authored by multi-source synthesis of:
 6. **"Write Code That Is Easy to Delete, Not Easy to Extend"** (programmingisterrible.com, cited inside charlax) — the original blog post articulating the end-to-end principle for software error handling.
 
 Substrate examples cite drift-notes from H.7.7 (`error-critic.js` consolidation), H.7.10 (`_lib/lock.js` RMW-race fix and broader fail-open discipline), H.7.23.1 (`verify-plan-gate.js` block-and-retry), H.3.6 (atomic-rename safety), and the broader forcing-instruction architecture as the substrate's load-bearing application of the end-to-end principle.
+
+## Related KB docs (planned, not yet authored)
+
+Forward references — these `kb_id` targets are deferred-author-intent (planned but not authored). When authored, references should migrate back into frontmatter `related:` per the bidirectional graph convention. Per HT.1.12 deferred-author-intent shape (`react-essentials.md` precedent).
+
+- `kb:architecture/discipline/refusal-patterns` — refusal patterns as the principled-rejection complement to error-handling discipline
 
 ## Phase
 

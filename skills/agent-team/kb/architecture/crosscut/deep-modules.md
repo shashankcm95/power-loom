@@ -15,7 +15,6 @@ sources_consulted:
   - "The Pragmatic Programmer (Hunt/Thomas, 20th anniv 2019) — orthogonality + decoupling principles"
 related:
   - architecture/crosscut/single-responsibility
-  - architecture/crosscut/information-hiding
   - architecture/crosscut/dependency-rule
 status: active+enforced
 ---
@@ -419,6 +418,12 @@ Authored by multi-source synthesis of:
 4. **The Pragmatic Programmer** (Hunt/Thomas, 20th anniv 2019). Orthogonality and decoupling as enabling principles for deep modules.
 
 Substrate examples cite drift-notes from H.3.6 (`_lib/lock.js` self-PID reclamation), H.7.10 (RMW-race fix), H.7.14 (`_lib/toolkit-root.js` extraction), H.7.21 (Edit-result scan extension), H.7.25 (Convention G class taxonomy as deep abstraction), and the broader hook-script architecture.
+
+## Related KB docs (planned, not yet authored)
+
+Forward references — these `kb_id` targets are deferred-author-intent (planned but not authored). When authored, references should migrate back into frontmatter `related:` per the bidirectional graph convention. Per HT.1.12 deferred-author-intent shape (`react-essentials.md` precedent).
+
+- `kb:architecture/crosscut/information-hiding` — information-hiding as the dual to deep-modules; abstraction-leakage controls
 
 ## Phase
 

@@ -8,6 +8,86 @@ For granular per-phase detail, see annotated tags `phase-H.x.y` and `swarm/H.x.y
 
 ---
 
+## [unreleased] — 2026-05-10 — HT.1.12 Architecture KB forward-reference resolution
+
+**Hardening Track refactor 12 of N.** Annotates 7 broken `related:` forward references across 5 of 10 architecture KBs to 5 unique non-existent `kb_id` targets via body-section migration per `react-essentials.md` precedent. Closes HT.0.5a E.1 most-weighty finding (bidirectional `related:` validator skips broken refs because targets don't exist). **No version bump** per pure-doc convention (matches HT.1.10 precedent).
+
+### Changed
+
+- **5 architecture KBs frontmatter cleanup + body section migration**: removed broken refs from `related:` arrays + added new H2 body section `## Related KB docs (planned, not yet authored)` before the `## Phase` postscript in each affected file:
+  - `kb/architecture/ai-systems/rag-anchoring.md` — 3 forward refs (agent-design + evaluation-under-nondeterminism + inference-cost-management)
+  - `kb/architecture/crosscut/deep-modules.md` — 1 forward ref (information-hiding)
+  - `kb/architecture/crosscut/dependency-rule.md` — 1 forward ref (information-hiding)
+  - `kb/architecture/discipline/error-handling-discipline.md` — 1 forward ref (refusal-patterns)
+  - `kb/architecture/discipline/trade-off-articulation.md` — 1 forward ref (refusal-patterns)
+
+- **NEW BACKLOG.md `decision-record-pattern: lightweight` entry** at `skills/agent-team/BACKLOG.md` — second of 3 planned lightweight BACKLOG entries per HT.1.6 declaration (sibling: HT.1.6 documentary persona class + HT.1.15 helper-deletion canonical pattern). Documents the deferred-author-intent shape (body-section migration; H2 for KBs with existing `related:` graphs vs H3 for KBs without; migration discipline when planned KB is authored).
+
+### Drift-note 72 NEW (captured at sub-plan time via empirical pre-validation)
+
+**Title**: HT.0.5a forward-reference count overstated vs empirical reality at HT.1.12 implementation.
+
+**Source**: HT-state.md cutover claim "11 broken refs across 7 of 10 architecture KBs to 8 non-existent kb_id targets."
+
+**Empirical reality** (post-empirical-pre-validation):
+- **7 broken refs across 5 of 10 architecture KBs to 5 unique non-existent kb_id targets**
+- Affected KBs: rag-anchoring (3), deep-modules (1), dependency-rule (1), error-handling-discipline (1), trade-off-articulation (1)
+- Unique planned-but-unauthored targets: agent-design, evaluation-under-nondeterminism, inference-cost-management, information-hiding, refusal-patterns
+
+**Root cause**: either HT.0.5a count miscounted, or the architecture tree shape changed between 2026-05-09 audit and 2026-05-10 implementation.
+
+**Sibling cohort with drift-notes 63 + 64 + 71** (measurement-methodology codification target for HT.2): four convergent layers of audit measurement-methodology gap now captured: drift-note 63 = function span detection (HT.1.4), drift-note 64 = LoC counting + 3-layer convergent measurement gap (HT.1.5), drift-note 71 = static-vs-dynamic regex classification (HT.1.11), drift-note 72 = forward-reference count overstated (HT.1.12).
+
+### Drift-note 73 NEW (captured at mid-implementation; inline-comment annotation pivot)
+
+**Title**: `parseFrontmatter` (`scripts/agent-team/_lib/frontmatter.js`) does not strip YAML inline `#` comments per YAML 1.2 spec; comments contaminate ref-string values in parser output.
+
+**Surfaced when**: initial HT.1.12 attempt at frontmatter inline annotations (`  - architecture/ai-systems/agent-design  # planned — not yet authored`) was tested via `parseFrontmatter` roundtrip and the output ref-string included the inline comment text (`'architecture/ai-systems/agent-design  # planned — not yet authored'` instead of clean kb_id).
+
+**Resolution**: pivoted from frontmatter inline annotation to body-section migration (Approach B per `react-essentials.md` precedent). Drift-note 73 deferred to HT.2 sweep candidate: extend `parseFrontmatter` to strip inline `#` comments per YAML 1.2 (additive enhancement; chaos-test the change against existing KB + ADR + pattern frontmatter to verify no regression).
+
+### Implementation observation
+
+**Mid-implementation encoding-shape pivot**: empirical pre-validation correctly confirmed inventory + scope (5 affected files; 7 broken refs; 5 unique targets) at sub-plan time but did NOT validate parser-behavior assumptions. The inline-comment encoding intent assumed YAML 1.2 parser behavior; the substrate's hand-rolled `parseFrontmatter` subset parser does not implement comment stripping. Pivot from inline-comment to body-section took ~10 min (5 file reverts + 5 body-section additions in parallel; scope confirmation already done by pre-validation; only encoding shape changed).
+
+**Pattern-level observation**: empirical pre-validation catches PLAN-VS-REALITY drift; 3-tier verification + parse roundtrip catches IMPLEMENTATION-VS-PLAN drift (HT.1.11 JSDoc comment-containment bug; HT.1.12 inline-comment pollution). BOTH layers are needed for clean execution. The HT.1.12 pivot was efficient because pre-validation had already confirmed scope; only encoding needed to change.
+
+### Methodology
+
+**Sub-plan-only** per HT.1.4 + HT.1.6 + HT.1.8 + HT.1.9 + HT.1.10 + HT.1.11 sub-plan-only precedent (now 7 consecutive sub-plan-only phases since HT.1.7's per-phase pre-approval gate). Pure-doc work against well-bounded empirical inventory; no fresh design surface (annotation shape established by `react-essentials.md` precedent); no schema change (YAML/markdown structure preserved); lightweight institutional discipline encoding (BACKLOG entry, not ADR). Per-phase pre-approval gate skipped with EXPLICIT decision rationale matrix.
+
+**Empirical pre-validation pattern is now 5-phase confirmed** (HT.1.8 + HT.1.9 + HT.1.10 + HT.1.11 + HT.1.12): per-export / per-file / file-existence / per-site-static-vs-dynamic / per-ref-existence inventory verified BEFORE sub-plan flips draft → approved. All 5 phases surfaced sub-plan-time findings (drift-notes 67 + 68 + 69 + 70 + 71 + 72) that refined scope or methodology vs the audit framing. Pattern naming candidate (HT.2 sweep target): "empirical pre-validation gate."
+
+### Verification
+
+- **70/70 install.sh smoke tests** (unchanged from HT.1.11; pure-doc work; no behavior surface affected)
+- **46/46 _h70-test.js asserts** (regression check; HT.1.12 doesn't touch agent-identity / its sub-modules)
+- **0 contracts-validate violations** excluding pre-existing 16 baseline
+- **YAML parse roundtrip verified clean** on all 5 affected files (32 real kb_ids in tree; 0 broken refs across architecture KB frontmatters post-edit; 0 comment-polluted refs)
+
+### Why this matters
+
+- **Closes HT.0.5a E.1 most-weighty finding** (bidirectional validator skips broken refs)
+- **Captures drift-note 72** (HT.0.5a count overstated; sibling cohort with drift-notes 63 + 64 + 71 — measurement-methodology codification target)
+- **Captures drift-note 73** (parseFrontmatter doesn't strip YAML inline comments — substrate-discipline-edge finding)
+- **Empirical pre-validation pattern is now 5-phase confirmed** (HT.1.8-1.12)
+- **Second lightweight BACKLOG decision-record entry** per HT.1.6 declaration (sibling cohort with HT.1.6 + HT.1.15)
+- **Body-section migration** per `react-essentials.md` precedent extends the deferred-author-intent shape from web-dev to architecture KB class
+- **Fifty-third distinct phase shape** in the HT track: KB forward-reference resolution + body-section deferred-author-intent shape + 2 drift-notes (72 + 73)
+
+### Plugin manifest
+
+`1.11.3` unchanged (no version bump per pure-doc convention; matches HT.1.10 precedent).
+
+### Out of scope (deferred)
+
+- **Authoring the 5 planned-but-unauthored KB docs** (agent-design + evaluation-under-nondeterminism + inference-cost-management + information-hiding + refusal-patterns) — deferred to post-Hardening Track per HT.1.12 backlog spec
+- **Bidirectional `related:` validator extension to KB docs** — currently scoped to pattern files via `pattern-related-bidirectional` validator at `contracts-validate.js:187`; HT.2 sweep candidate
+- **`parseFrontmatter` extension to strip YAML inline `#` comments** — drift-note 73; HT.2 sweep candidate (additive enhancement)
+- **Cross-subtree forward-reference scan** (backend-dev / data-dev / hets / infra-dev / ml-dev / mobile-dev / security-dev / web-dev) — survey may reveal sibling broken refs; HT.2 sweep candidate
+
+---
+
 ## [unreleased] — 2026-05-10 — HT.1.11 Per-call regex compilation cleanup
 
 **Hardening Track refactor 11 of N.** Targeted optimization across 6 sites with empirical-pre-validation-driven scope refinement. Closes HT.0.1 + HT.0.2 + HT.0.4 per-call regex compilation findings as targeted optimization (6 sites with actual migration value) rather than blanket sweep (would have over-applied to 3 Tier 4 sites without value). **No version bump** per pure-refactor convention (matches HT.1.2 + HT.1.8 + HT.1.9 precedents).
