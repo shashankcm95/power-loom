@@ -8,6 +8,94 @@ For granular per-phase detail, see annotated tags `phase-H.x.y` and `swarm/H.x.y
 
 ---
 
+## [unreleased] — 2026-05-10 — HT.1.15 _lib/safe-exec.js adoption decision (keep at 2-caller scope + lightweight BACKLOG canonical-pattern entry)
+
+**Hardening Track refactor 15 of N. THIRD and FINAL lightweight institutional decision record per HT.1.6 BACKLOG.md declaration. CLOSES HT.1 backlog top-15 cap.** Documents canonical safe-subprocess pattern + adoption boundary; resolves drift-note 76 in-scope (sibling shape with HT.1.10 drift-note 70). **No version bump** per pure-doc convention (matches HT.1.10/1.12 precedents).
+
+### Changed
+
+- **NEW lightweight BACKLOG.md entry** at `skills/agent-team/BACKLOG.md` between HT.1.12 entry and Phase H.8.4 entry (third `decision-record-pattern: lightweight` entry per HT.1.6 declaration). Documents:
+  - Canonical safe-subprocess pattern (array-form `execFileSync('node', [scriptPath, ...args], opts)` via `_lib/safe-exec.js` helper)
+  - Adoption boundary table (USE cases vs 6 NON-USE cases enumerated for pattern-recorder + _h70-test + contract-verifier + session-self-improve-prompt + auto-store-enrichment + pre-compact-save)
+  - Future-state guidance (3rd caller threshold; API extension via ADR-update gate; deletion threshold ≤1 caller)
+  - drift-note 76 resolution-in-scope rationale
+
+- **NO code changes**: pure decision-record + canonical-pattern documentation. `_lib/safe-exec.js` + 2 consumers preserved unchanged.
+
+### Drift-note 76 NEW (captured at sub-plan time + RESOLVED in-scope)
+
+**Title**: HT.0.8 Trajectory.2 helper caller-count overstated vs empirical reality at HT.1.15.
+
+**Source**: HT.0.8 audit + HT.0.9-verify backlog spec cited "1 caller post-H.8.4" for `_lib/safe-exec.js` helper.
+
+**Empirical reality** (HT.1.15): **2 caller files; 3 actual call sites**:
+
+| File | Functions used | Call sites |
+|------|----------------|-----------|
+| `scripts/agent-team/build-spawn-context.js` | `invokeNodeJson`, `invokeNodeText` | 2 (one per function; wrapped in local `invokeJson` + `invokeKbResolver` thin delegates) |
+| `hooks/scripts/validators/validate-adr-drift.js` | `invokeNodeJson` | 1 (wrapped in `_runAdrTouchedBy`) |
+
+Both consumers have `H.8.4: ...safe-exec helper...` provenance comments — both have existed since the helper's creation phase. The HT.0.8 audit's "1 caller" framing was a miscount.
+
+**Sibling cohort with measurement-methodology drift-notes 63 + 64 + 71 + 72 + 74** — **six-instance pattern of audit count drift now established**. HT.2 sweep target to re-validate other HT.0.x finding counts against current empirical state.
+
+**Resolution: in-scope at HT.1.15**. Sibling shape with HT.1.10 drift-note 70 (path-convention finding misframed → conventions ARE intentional context-dependent semantic encoding; convention doc closes documentation gap). drift-note 76 resolves by reframing the helper's appropriate scope (2 callers IS the correct scope; pivot from delete-and-migrate to keep-and-document).
+
+### Decision pivot rationale
+
+**Backlog spec (HT.0.9-verify approved)**: option (a) "delete `_lib/safe-exec.js`; migrate `build-spawn-context.js` to direct `execFileSync` with same array-form semantics".
+
+**Pivot to option (b/c) keep + document** — empirical 2-caller reality flips the math:
+
+- **Code growth on deletion would be net positive (+15-30 LoC)**: 3 call sites × ~5-10 LoC of try/catch + stderr-log + `execFileSync` boilerplate = duplication exceeding the helper's ~70 LoC implementation. The helper IS doing real DRY work at 2-caller scope.
+- **Security provenance preservation**: helper was created in response to chaos C1 RCE finding (chaos-20260508-191611-h83-trilogy POC: `--task 'foo $(touch /tmp/PWNED) bar'` triggered RCE).
+- **HT.1.8 "extract at 3+ callers" rule asymmetry**: rule guides EXTRACTION; doesn't symmetrically apply to DELETION of existing extractions because deletion adds duplication when ≥2 callers exist.
+- **Adoption boundary clarity**: helper's API well-scoped to `node script.js [args]` patterns; other spawnSync sites have bespoke shape that doesn't fit.
+
+### Methodology
+
+**Sub-plan-only** per HT.1.4 + HT.1.6 + HT.1.8 + HT.1.9 + HT.1.10 + HT.1.11 + HT.1.12 + HT.1.14 sub-plan-only precedent (now **9 consecutive sub-plan-only phases since HT.1.7 with HT.1.13 as the only per-phase pre-approval invocation in between**). Per-phase pre-approval gate skipped with EXPLICIT decision rationale matrix per HT.1.6 convention (no fresh design surface — empirical caller-count drives pivot; no schema change; lightweight institutional discipline encoding via BACKLOG entry).
+
+**Empirical pre-validation pattern is now 8-phase confirmed** (HT.1.8-1.15): per-caller-count empirical inventory verified BEFORE sub-plan flips draft → approved.
+
+### Verification
+
+- **73/73 install.sh smoke** (unchanged from HT.1.14; pure-doc work; no behavior surface affected)
+- **46/46 _h70-test.js asserts** (regression check)
+- **0 contracts-validate violations** excluding pre-existing 16 baseline
+- **`_lib/safe-exec.js` + 2 consumers preserved unchanged** (no code changes)
+
+### Why this matters
+
+- **Closes HT.0.8 Trajectory.2 lowest-priority backlog finding** as decision-record (option b/c keep + document)
+- **drift-note 76 RESOLVED in-scope** (sibling shape with HT.1.10 drift-note 70) — six-instance audit-count-drift pattern now established (sufficient evidence for HT.2 measurement-methodology codification doc)
+- **Closes HT.1 backlog top-15 cap** — third-and-final lightweight BACKLOG decision-record entry per HT.1.6 declaration; HT.2 starts after this phase
+- **Empirical pre-validation pattern is now 8-phase confirmed** (HT.1.8-1.15) — pre-cycle resolution shape complete across HT.1.8-1.15 cohort
+- **HT.0.9-verify FLAG-5 right-sizing validated empirically across all 3 lightweight BACKLOG entries** (HT.1.6 + HT.1.12 + HT.1.15) — substrate's ADR institutional ledger remains at 4 ADRs total post-HT.1 (would have been 7 ADRs without right-sizing)
+- **Fifty-sixth distinct phase shape**: lightweight institutional decision-record + drift-note RESOLVED in-scope + canonical-pattern documentation
+
+### Plugin manifest
+
+`1.12.0` unchanged (no version bump per pure-doc convention; matches HT.1.10 + HT.1.12 precedents).
+
+### HT.1 cumulative reflections (closing the backlog)
+
+- **15 phases shipped** over ~36 hours wallclock cumulatively over 2026-05-10 to 2026-05-11
+- **Methodology distribution**: 11 sub-plan-only + 4 per-phase pre-approval gate INVOCATIONS (HT.1.3 + HT.1.5 + HT.1.7 + HT.1.13) + 1 mechanical (HT.1.1) ≈ 73%/27% ratio
+- **Empirical pre-validation pattern**: 8 of 15 phases (HT.1.8-1.15) used the gate; ALL 8 surfaced sub-plan-time drift-notes (67-76)
+- **Drift-note inventory**: 12 captured for HT.2 sweep (drift-notes 63 + 64 + 65 + 66 + 67 + 68 + 69 + 71 + 72 + 73 + 74 + 75) + 2 RESOLVED in-scope (drift-note 70 at HT.1.10; drift-note 76 at HT.1.15)
+- **Plugin manifest progression**: 1.9.0 → 1.9.1 → 1.10.0 → 1.10.1 → 1.11.0 → 1.11.1 → 1.11.2 → 1.11.3 → 1.12.0 (3 minor + 4 patch + 8 unchanged increments)
+- **Lightweight BACKLOG decision-record entries shipped**: 3 of 3 planned (HT.1.6 + HT.1.12 + HT.1.15)
+- **ADR institutional ledger growth**: ADR-0001 (seed; H.8.2) + ADR-0002 (proposed; HT.1.3) + ADR-0003 (accepted; HT.1.7) + ADR-0005 (accepted; HT.1.13). Three-tier taxonomy introduced at HT.1.13 (technical / governance / editorial)
+
+### Out of scope (deferred)
+
+- **Expand-helper-adoption** to other spawnSync sites — bespoke shapes don't fit helper's contract; deferred indefinitely; HT.2+ sweep candidate ONLY if patterns converge
+- **Helper API expansion** (`invokeNodeBinary`, async variant) — YAGNI; current 2-caller use is sufficient; HT.2+ sweep candidate
+- **drift-note 75 fix** (`_lib/lock.js` lockfile-parent-dir resilience) — separate substrate primitive; HT.2 sweep candidate (sibling cohort with drift-note 67 + 75)
+
+---
+
 ## [unreleased] — 2026-05-10 — HT.1.14 auto-store-enrichment.js subprocess density (batched into in-process call)
 
 **Hardening Track refactor 14 of N.** Replaces 22-spawnSync worst-case in `auto-store-enrichment.js` `bumpSelfImproveCounters` with single in-process `require(SELF_IMPROVE_SCRIPT).bumpBatch(signals)` call. Closes HT.0.1 D.1 most-weighty hooks-layer optimization finding. **No version bump** per pure-refactor convention (matches HT.1.2/HT.1.8/HT.1.9/HT.1.11 precedent).

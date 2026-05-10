@@ -145,6 +145,92 @@ Original HT.1.12 decision (per HT.0.9-verify FLAG-5 right-sizing) was: react-ess
 
 Per HT.0.9-verify FLAG-5 right-sizing, this is the second of 3 lightweight BACKLOG entries planned across HT.1 (HT.1.6 documentary persona class + HT.1.12 deferred-author-intent + HT.1.15 helper-deletion canonical pattern).
 
+## Phase HT.1.15 — `_lib/safe-exec.js` adoption decision / canonical safe-subprocess pattern — DECISION RECORD (lightweight)
+
+**Status**: shipped 2026-05-10. **Third and final** `decision-record-pattern: lightweight` entry in BACKLOG.md per HT.1.6 declaration (line 79: "first of 3 lightweight BACKLOG entries planned across HT.1 — HT.1.6 + HT.1.12 + HT.1.15"). Closes HT.0.8 Trajectory.2 lowest-priority backlog finding (score 2). **Closes HT.1 backlog top-15 cap**.
+
+### Decision pivot (drift-note 76 driven)
+
+**Backlog spec (HT.0.9-verify approved)**: option (a) "delete `_lib/safe-exec.js`; migrate `build-spawn-context.js` to direct `execFileSync` with same array-form semantics" — based on cited "1 caller post-H.8.4".
+
+**Empirical pre-validation finding (drift-note 76)**: helper has **2 caller files; 3 actual call sites** (verified via `grep -rln "_lib/safe-exec\|invokeNodeJson\|invokeNodeText"`):
+
+| File | Functions used | Call sites |
+|------|----------------|-----------|
+| `scripts/agent-team/build-spawn-context.js` | `invokeNodeJson`, `invokeNodeText` | 2 (one per function; wrapped in local `invokeJson` + `invokeKbResolver` thin delegates) |
+| `hooks/scripts/validators/validate-adr-drift.js` | `invokeNodeJson` | 1 (wrapped in `_runAdrTouchedBy`) |
+
+Both consumers have `H.8.4: ...safe-exec helper...` provenance comments — both have existed since the helper's creation phase. The HT.0.8 audit's "1 caller" framing was a miscount.
+
+**Pivot**: option (a) → **option (b/c) keep helper at 2-caller scope + lightweight BACKLOG canonical-pattern entry**. Sibling shape with HT.1.10 drift-note 70 in-scope resolution.
+
+### Why pivot from delete-and-migrate to keep-and-document
+
+- **Code growth on deletion would be net positive (+15-30 LoC)**: 3 call sites × ~5-10 LoC of try/catch + stderr-log + `execFileSync` boilerplate = duplication exceeding the helper's ~70 LoC implementation. The helper IS doing real DRY work at 2-caller scope.
+- **Security provenance preservation**: helper was created in response to chaos C1 RCE finding (chaos-20260508-191611-h83-trilogy POC: `--task 'foo $(touch /tmp/PWNED) bar'` triggered RCE). Deleting + redistributing the safe-execution pattern dilutes the security-fix institutional ledger.
+- **HT.1.8 "extract at 3+ callers" rule asymmetry**: the rule guides EXTRACTION of new helpers; doesn't symmetrically apply to DELETION of existing extractions. The asymmetry is load-bearing — extraction adds module-boundary indirection (cost); deletion adds duplication (net negative when ≥2 callers).
+- **Adoption boundary clarity**: helper's API (`invokeNodeJson` + `invokeNodeText` for `node script.js [args]` patterns) is well-scoped. Other spawnSync sites have bespoke shape that doesn't fit the helper's contract.
+
+### Canonical safe-subprocess pattern (codified)
+
+**Pattern**: array-form `execFileSync('node', [scriptPath, ...args], opts)` is the substrate's safe-subprocess pattern for `node script.js [args]` invocations. The `_lib/safe-exec.js` helper provides this pattern with built-in fail-soft try/catch + stderr observability per ADR-0001 invariant 2.
+
+**Adoption boundary** — when to use helper vs direct invocation:
+
+| Use case | Use helper? | Rationale |
+|----------|-------------|-----------|
+| `node script.js [args]` invocation with JSON-or-text stdout consumption + uniform fail-soft (return null on error) | **YES** | Current 2 callers fit exactly. `invokeNodeJson` for JSON; `invokeNodeText` for text. |
+| Non-Node binary (`git X`, `bash X`) | NO | Helper is Node-script-specific; pass `node` literal hardcoded |
+| Bespoke timeout per call | NO | Helper accepts `opts.timeout` but if site needs per-iteration timeout variation, direct call is clearer |
+| Async / non-blocking spawn | NO | Helper uses `execFileSync` (synchronous); contract-verifier:650 uses `spawn` for non-blocking — different shape |
+| Stdin-feeding pattern | NO | Helper does `stdio: ['pipe', 'pipe', 'pipe']` without stdin write; pre-compact-save:267 + auto-store-enrichment:177 use this shape but feed stdin first |
+| Test-fixture invocations with custom env/cwd | NO | _h70-test.js + smoke-ht.sh use bespoke env vars (HETS_IDENTITY_STORE etc.) per fixture |
+| Forwarding pattern (pattern-recorder.js spawn-recorder) | NO | Bespoke argv mutation; per-call observability tracking |
+
+**DO NOT migrate** the following spawnSync sites to helper (out of helper's contract):
+
+- `scripts/agent-team/pattern-recorder.js:185` (forwarding pattern)
+- `scripts/agent-team/_h70-test.js:240,383` (test-fixture invocations)
+- `scripts/agent-team/contract-verifier.js:650` (non-blocking `spawn`)
+- `hooks/scripts/session-self-improve-prompt.js` (conditional invocation)
+- `hooks/scripts/auto-store-enrichment.js:177` (storePattern with stdin feed)
+- `hooks/scripts/pre-compact-save.js:267` (scan trigger with stdin feed)
+
+### Future-state guidance
+
+- **If a 3rd caller emerges with the same `node script.js → JSON/text stdout` shape**: keep helper; add caller; no refactor.
+- **If helper's API needs extension** (e.g., async variant, custom return-shape parser): defer to ADR-update gate per HT.1.6 + HT.1.12 BACKLOG-entry precedent (lightweight extension OK; substantive API redesign warrants ADR).
+- **If helper drops to ≤1 caller**: reconsider deletion-and-migrate per backlog spec original intent. Trigger: post-HT.2 sweep audit if any caller migrates away.
+
+### Drift-note 76 RESOLVED in-scope
+
+HT.0.8 cited "1 caller"; empirical 2 callers. Sibling cohort with measurement-methodology drift-notes 63 + 64 + 71 + 72 + 74 — **six-instance pattern of audit count drift now established**. HT.2 sweep target to re-validate other HT.0.x finding counts against current empirical state. drift-note 76 is RESOLVED in-scope here (sibling shape with HT.1.10 drift-note 70) by reframing the helper's appropriate scope.
+
+### What landed
+
+| Sub-phase | Scope | Key files |
+|-----------|-------|-----------|
+| 1 | Sub-plan + drift-note 76 capture + decision-pivot rationale | `swarm/thoughts/shared/plans/2026-05-10-HT.1.15-safe-exec-adoption.md` |
+| 2 | This BACKLOG.md decision-record-pattern entry | `skills/agent-team/BACKLOG.md` (this section) |
+| 3 | Cutover (no plugin manifest bump per pure-doc convention; HT.1.10/1.12 precedent) | `skills/agent-team/SKILL.md`, `CHANGELOG.md`, `swarm/thoughts/shared/HT-state.md` |
+
+### Verification
+
+- 73/73 install.sh smoke (unchanged from HT.1.14; pure-doc work; no behavior surface affected)
+- 46/46 _h70-test.js asserts (regression check)
+- 0 contracts-validate violations excluding pre-existing 16 baseline
+- `_lib/safe-exec.js` exists + 2 consumers preserved (no code changes)
+
+### Why lightweight BACKLOG entry vs full ADR
+
+Per HT.0.9-verify FLAG-5 right-sizing — bounded scope (2 callers; helper-API surface stable; no forward-looking discipline encoding for ANY substrate surface beyond the helper itself); ADR-0006 was downgraded to BACKLOG entry per architect FLAG-5. The decision is documentary (canonical pattern + adoption boundary) rather than institutional (no cross-cutting commitment). Lightweight BACKLOG entry preserves the decision record without ADR-system bloat.
+
+Per HT.0.9-verify FLAG-5 right-sizing, this is the **third and final** of 3 lightweight BACKLOG entries planned across HT.1 (HT.1.6 documentary persona class + HT.1.12 deferred-author-intent + HT.1.15 safe-exec adoption / canonical pattern). All 3 lightweight BACKLOG entries shipped; HT.0.9-verify right-sizing validated empirically.
+
+### Closes HT.1 backlog top-15 cap
+
+HT.1.15 is the final phase in the HT.1 backlog top-15 cap. Items 16+ deferred per HT.0.9 cap discipline. **HT.2 starts after this phase ships** — substantive doc-lag + measurement-methodology + parser-discipline-edge + hooks-discipline-edge codification phase with explicit per-drift-note action matrix for the 12-drift-note inventory (drift-notes 63 + 64 + 65 + 66 + 67 + 68 + 69 + 71 + 72 + 73 + 74 + 75; drift-note 70 RESOLVED in-scope at HT.1.10; drift-note 76 RESOLVED in-scope at HT.1.15).
+
 ## Phase H.8.4 — Shell injection RCE fix + Cyrillic homograph fix + routing rule count correction — SHIPPED
 
 **Status**: shipped. Hot-fix execution by 12-security-engineer.mio in response to chaos run chaos-20260508-191611-h83-trilogy. Pre-approval by 04-architect.mira + 03-code-reviewer.jade with NEEDS-REVISION; revised plan applied.
