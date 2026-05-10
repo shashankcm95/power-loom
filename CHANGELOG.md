@@ -8,6 +8,62 @@ For granular per-phase detail, see annotated tags `phase-H.x.y` and `swarm/H.x.y
 
 ---
 
+## [1.11.3] — 2026-05-10 — HT.1.10 Path-convention consolidation (convention doc only)
+
+**Hardening Track refactor 10 of N.** Convention doc authoring per `decision-record-pattern: lightweight` shape — closes HT.0.3 + HT.0.4 + HT.0.5a path-convention findings as documentation rather than code change. Empirical pre-validation per HT.1.8/1.9 dogfooded pattern reveals that the apparent "5-convention inconsistencies" are intentional context-dependent semantic encoding (drift-note 70). Scope reduces from "convention doc + 8+ site sweep" to "convention doc only."
+
+### Added
+
+- **NEW `swarm/path-reference-conventions.md`** (203 LoC) — codifies the 5 path conventions in use across substrate documentation, commands, persona MDs, and KB docs:
+  1. **Repo-relative** (`scripts/agent-team/X.js`) — for ADR `files_affected`, persona contract `kb_scope`, internal substrate references
+  2. **Hardcoded author-machine** (`~/Documents/claude-toolkit/X`) — for source-only files (e.g., `swarm/hierarchical-aggregate.js`, `swarm/personas-contracts/*.json`, `swarm/run-state/`); persona MD instructions executing on author's machine; documentation of source location
+  3. **`$HOME`-aware** (`$HOME/Documents/claude-toolkit/X`) — for slash-command bash where `~` expansion is unreliable (per HT.1.5-verify code-reviewer Q4 HIGH catch); used in `commands/build-team.md`, `build-team-helpers.sh`
+  4. **Relative path** (`../`) — for cross-internal documentation references (file-to-sibling)
+  5. **Deployed-marketplace** (`~/.claude/X`) — for runtime invocation of deployed install (e.g., compliance-probe; testing deployed hook behavior); both-locations-write pattern in forge.md/evolve.md
+- Decision tree for "which convention applies?"
+- Examples from `commands/chaos-test.md`, `swarm/personas/02-confused-user.md`, `commands/build-team.md`, `swarm/personas/04-architect.md` showing correct context-dependent usage
+- Documentation of `findToolkitRoot()` runtime resolution as the substrate-script counterpart to documentation conventions
+- "What this DOES NOT prescribe" section closing the multi-machine portability + automated lint enforcement out-of-scope items
+
+### Drift-note 70 RESOLVED
+
+**Title**: HT.1.10 "5 path conventions" finding was misframed as needing a sweep — empirical pre-validation reveals the conventions are intentional context-dependent semantic encoding.
+
+**Resolution**: HT.0.3 + HT.0.4 + HT.0.5a "5 path conventions" finding hereby reclassified from "consolidation candidate" / "needs sweep" to "documentation gap (now closed)." The 5 conventions are intentional: source-only files MUST use source paths (e.g., `swarm/hierarchical-aggregate.js` does NOT exist at `~/.claude/swarm/...`); deployed-and-source files can use deployed paths for runtime invocation; documentation references the actual file location regardless. Future audits framing the conventions as "inconsistency" should consult `swarm/path-reference-conventions.md` rather than recommending sweep.
+
+### Methodology
+
+**Sub-plan-only** per HT.1.6 BACKLOG.md `decision-record-pattern: lightweight` precedent (this is the second lightweight decision record after HT.1.6's documentary persona class entry); convention doc has institutional weight without ADR-system-bloat. No fresh design surface beyond documentation framing; no code changes; no schema change. Per-phase pre-approval gate skipped with EXPLICIT decision rationale matrix.
+
+**Empirical pre-validation pattern is now 3-phase confirmed** (HT.1.8 + HT.1.9 + HT.1.10): per-export consumer counts / per-file inventory verified BEFORE sub-plan flips draft → approved. Surfaced drift-note 70 + scope reduction at sub-plan time rather than during-implementation discovery; 100% green first-pass verification. Pattern naming candidate (HT.2 sweep target): "empirical pre-validation gate" — institutional discipline for sweep-style refactors.
+
+### Verification
+
+- **70/70 install.sh smoke tests** (unchanged from HT.1.9 — no code changes; convention doc only)
+- **46/46 _h70-test.js asserts** (regression check)
+- **0 contracts-validate violations** excluding pre-existing 16 baseline
+- **Convention doc 203 LoC** (slightly over 100-200 target due to comprehensive examples + decision tree; load-bearing for institutional documentation)
+
+### Why this matters
+
+- **Closes HT.0.3 + HT.0.4 + HT.0.5a path-convention findings** as documentation (not code change)
+- **Captures + resolves drift-note 70** (the convention finding was misframed as needing a sweep; pre-validation reveals it's a documentation gap)
+- **Empirical pre-validation pattern is now 3-phase confirmed** (HT.1.8 + HT.1.9 + HT.1.10 all surfaced meaningful sub-plan findings via empirical smoke before sub-plan finalization); forward-looking institutional discipline for sweep-style refactors
+- **Lightweight institutional decision record** per HT.1.6 BACKLOG.md `decision-record-pattern: lightweight` precedent (second-of-3 planned across HT.1; sibling: HT.1.6 documentary persona class + HT.1.10 this doc + HT.1.12 deferred-author-intent or HT.1.15 helper-deletion canonical pattern per HT.0.9-verify FLAG-5 right-sizing)
+- **Fifty-first distinct phase shape** in the HT track: convention doc authoring + drift-note-driven scope reduction + lightweight institutional decision record
+
+### Plugin manifest
+
+`1.11.2 → 1.11.3` (patch — additive substrate convention doc; no behavior change visible to consumers).
+
+### Out of scope (deferred)
+
+- **Multi-machine portability migration** (out of scope; not currently a substrate goal; HT.2+ candidate)
+- **Automated lint enforcement of the convention** (HT.2+ sweep candidate)
+- **Per-file migration of persona MDs / KB docs to runtime-resolved paths** (out of scope; substrate scripts already use `findToolkitRoot()` at runtime)
+
+---
+
 ## [unreleased] — 2026-05-10 — HT.1.9 Speculative-API exports cleanup sweep
 
 **Hardening Track refactor 9 of N.** Mechanical sweep converging substrate export-surface — drops 21 speculative-API exports across 7 files. Closes HT.0.1 D-finding (3 hooks/_lib/ modules with 7 speculative exports) + HT.0.2 D-finding (4 substrate scripts with 0-consumer module.exports) + HT.0.6 E-finding (`adr.js` exports with 0 external callers). **No version bump** per pure-refactor convention (matches HT.1.2 + HT.1.8 precedents).
