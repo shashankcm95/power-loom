@@ -2,6 +2,48 @@
 
 Deferred work from prior phases, captured here so nothing important gets silently dropped. Each entry: scope, rationale, dependencies, rough estimate.
 
+## Phase H.9.0 — Ledger-entry authoring convention (backtick-wrap underscored identifiers) — DECISION RECORD (lightweight)
+
+**Status**: shipped 2026-05-11. **Fourth** `decision-record-pattern: lightweight` entry in BACKLOG.md (HT.1.6 + HT.1.12 + HT.1.15 + H.9.0). Authored after the 2026-05-11 CI markdown-lint failure post-HT.3.3 merge surfaced a recurring authoring gap: ledger entries reference identifiers like `_h70-test.js`, `_lib/lock`, `_lib/atomic-write`, `__test_internals__`, `_stripInlineComment` without backtick wrapping; same-line pair sites form MD037 emphasis-paired markdown that triggers markdownlint.
+
+### Convention (codified)
+
+Ledger-shape markdown documents — CHANGELOG.md, skills/agent-team/SKILL.md phase status section, skills/agent-team/BACKLOG.md, swarm/thoughts/shared/HT-state.md — wrap references to underscored substrate identifiers in inline backticks:
+
+| Substrate identifier shape | Bare (BAD — triggers MD037 on same-line pairs) | Backtick-wrapped (GOOD) |
+|----------------------------|-----------------------------------------------|--------------------------|
+| `_h70-test.js` test runner | `_h70-test.js` | `` `_h70-test.js` `` |
+| `_lib/*` shared modules | `_lib/lock.js`, `_lib/atomic-write.js`, `_lib/frontmatter.js`, `_lib/safe-exec.js`, `_lib/settings-reader.js` | `` `_lib/lock.js` ``, etc. |
+| `__test_internals__` CLI surface | `__test_internals__` | `` `__test_internals__` `` |
+| Private helpers (`_<name>`) | `_stripInlineComment`, `_backfillSchema`, `_computeRecommendation`, etc. | `` `_stripInlineComment` ``, etc. |
+
+### Why MD037 fires on bare underscored identifiers
+
+Markdown's emphasis-pair parsing treats `_word_` as italic emphasis. Bare `_h70-test.js` appearing twice on the same line forms an emphasis pair with the spaced content between → MD037 (`no-space-in-emphasis`) fires. Wrapping each occurrence in backticks treats them as inline code, breaking emphasis pairing.
+
+### Enforcement mechanism
+
+Test 80 in `tests/smoke-ht.sh` (H.9.0 ship) runs `npx --yes markdownlint-cli2 "**/*.md" "#node_modules" "#swarm"` at install.sh smoke time. Fail-on-error. The substrate's local verification harness now matches CI's `Markdown lint` job; ledger-authoring drift is caught at smoke time (pre-commit) rather than at post-merge CI (post-ship).
+
+### Scope bounds
+
+This convention is **observation-shaped** (per HT.3.2 measurement-methodology reframe pattern): describes what the lint enforces, not a binding rule on how authors must think. Authors compose ledger entries in their natural voice; Test 80 catches the bare-underscore issue at verification time.
+
+### Why lightweight BACKLOG entry vs full ADR
+
+- **Bounded scope**: convention applies to 4 substrate identifier patterns, not a general authoring discipline
+- **No new institutional commitment** beyond the test-harness enforcement (Test 80)
+- **Per HT.0.9-verify FLAG-5 right-sizing**: ADR-system bloat avoidance — ADR ledger stays at 5 (ADR-0001/0002/0003/0004/0005)
+- **Matches HT.1.6 + HT.1.12 + HT.1.15 precedent**: bounded decision records that don't merit ADR weight
+
+### Cross-references
+
+- `tests/smoke-ht.sh` Test 80 — H.9.0 enforcement mechanism
+- 2026-05-11 markdownlint fix commit `1f00bf1` — content-level fix that surfaced the gap
+- ADR-0005 slopfiles-authoring-discipline — sibling editorial-tier convention (predicate-vocabulary for `<important if>`); ADR-0005 is institutional; H.9.0 entry is bounded decision record
+- `swarm/measurement-methodology.md` — sibling observation-shaped catalog
+- `swarm/path-reference-conventions.md` — sibling lightweight institutional artifact
+
 ## Phase HT.1.6 — Documentary persona class + roster shape — DECISION RECORD (lightweight)
 
 **Status**: shipped 2026-05-10. First `decision-record-pattern: lightweight` entry in BACKLOG.md per HT.0.9-verify architect FLAG-5 right-sizing (ADR-system-bloat avoidance: original sub-plan draft proposed ADR-0003 for documentary persona class; downgraded to lightweight BACKLOG entry because the discipline is bounded to one persona class with N=3 instances and doesn't need full ADR institutional weight).

@@ -8,6 +8,63 @@ For granular per-phase detail, see annotated tags `phase-H.x.y` and `swarm/H.x.y
 
 ---
 
+## [unreleased] — 2026-05-11 — H.9.0 markdownlint in local verification harness (closes process gap from 2026-05-11 CI failure)
+
+**First substantive sub-phase of post-HT H.9.x track.** H.9.0 closes the structural process gap surfaced by the 2026-05-11 CI markdown-lint failure post-HT.3.3 merge (22 MD037/MD038 errors accumulated across HT ledger entries because markdownlint wasn't in local verification — CI was sole enforcer + ran only on push to main). Adds Test 80 to `tests/smoke-ht.sh` running `npx --yes markdownlint-cli2 "**/*.md" "#node_modules" "#swarm"` against substrate; asserts exit 0. Adds 4th lightweight BACKLOG entry codifying ledger-authoring convention (backtick-wrap underscored substrate identifiers). **No plugin manifest bump** per pure-process-improvement convention.
+
+### Context — process gap retrospective
+
+Post-HT.3.3 + 2026-05-11 markdownlint fix retrospective surfaced a layer mismatch: substrate had strong design-time discipline (7 per-phase pre-approval gates across HT track; 100% single-pass FLAG absorption) + strong runtime discipline (14 hooks + 4 ADRs codifying invariants), but weak content-format-time discipline (`.markdownlint.json` existed since H.7.8 but markdownlint was NOT in local verification harness). The 49-commit HT track accumulated 22 markdownlint violations across CHANGELOG/SKILL/BACKLOG ledger entries surfacing only at the final fast-forward merge to main. Pre-approval gates reviewed sub-plan + implementation, NOT cutover-time bookkeeping prose written AFTER gate approval. Verification probes were code/test focused; markdownlint was absent.
+
+The H.7.27 CHANGELOG entry — which DOCUMENTED migrating the `[MARKDOWN-EMPHASIS-DRIFT]` hook TO markdownlint pipeline — itself contained the cluster pattern (`HETS_TOOLKIT_DIR _h70-test _lib/`) unwrapped, violating the migration's own discipline. Self-referential irony: author-side discipline existed in slopfiles prose but didn't apply to ledger writing.
+
+### What landed
+
+- **Test 80 in `tests/smoke-ht.sh`** — invokes `npx --yes markdownlint-cli2 "**/*.md" "#node_modules" "#swarm"` (same command CI's Markdown lint job uses); asserts exit 0 + reports cleanly on success. First-run on a fresh machine takes ~5-10s to fetch markdownlint-cli2 into npx cache; subsequent runs are ~2-3s. install.sh smoke count 75/75 → 76/76.
+
+- **Lightweight BACKLOG entry** (4th `decision-record-pattern: lightweight` entry; per HT.1.6 + HT.1.12 + HT.1.15 precedent) codifying ledger-authoring convention: backtick-wrap references to underscored substrate identifiers (`_h70-test*`, `_lib/*`, `__test_internals__`, private helpers) in ledger entries. Avoids MD037 emphasis-pair fires. Observation-shaped per HT.3.2 reframe pattern.
+
+### Methodology
+
+Sub-plan-only per HT.1.6 decision-rationale-matrix convention. 5 of 5 triggers absent (no fresh design surface; no schema change; no option-axis decision; no institutional discipline encoding — lightweight BACKLOG entry per existing 3-entry precedent; no HIGH-class bug catchable at design). Pure-process-improvement per HT.1.10/HT.2.4 + lightweight BACKLOG entry precedent.
+
+### Soak gate impact
+
+H.9.0 is a **CLEAN phase** toward v2.0.0:
+- No new ADR (ledger stays at 5)
+- No new substrate convention doc (3 unchanged)
+- No schema change
+- No institutional commitment (lightweight BACKLOG entry is decision-RECORD, not institutional invariant)
+
+H.9.0 counts as **1 of 5+ clean phases** needed since HT.3.1 (last institutional commitment — ADR-0004 codification). 4 more clean phases needed before v2.0.0 release gate retests GREEN.
+
+### Verification
+
+- **install.sh smoke**: 76/76 (was 75/75; +1 Test 80)
+- **_h70-test.js asserts**: 64/64 (unchanged)
+- **contracts-validate.js violations**: 16 baseline only (no regression)
+- **Test 80 inline output**: "OK (substrate markdown lint clean; 0 errors)"
+
+### Plugin manifest
+
+`1.12.3` UNCHANGED per pure-process-improvement convention.
+
+### Wallclock
+
+~30 min end-to-end.
+
+### Pattern-level observations
+
+- **Layer-mismatch gap pattern**: design-time discipline (pre-approval gates) ≠ content-format-time discipline (lint). Substrate had the former; lacked latter for markdown. H.9.0 dogfoods adding format-time discipline at local verification layer.
+- **Verification probe scope review**: prior probes were "does substrate behavior work" not "does substrate content lint clean." Smaller pattern: "verification probe scope should follow what CI enforces" — if CI runs N checks, local verification should run those N checks.
+- **Self-referential discipline failure**: H.7.27 CHANGELOG entry violated the discipline it documented (migrate emphasis detection to markdownlint). Discipline-in-prose ≠ discipline-in-practice unless enforced.
+
+### Next
+
+**H.9.1+** — substantive H.9.x trajectory work per HT.2.5 readout focus areas (error-critic.js fail-soft + 8 atomic-write sites + Atomics.wait + Tier-3 audit findings + ADR drift-detection enhancement). Soak gate progress: 1/5+ clean phases since HT.3.1.
+
+---
+
 ## [unreleased] — 2026-05-11 — HT.3.3 ADR-0002 status flip `proposed` → `accepted` (post-HT audit-followup Tier 2 third and final sub-phase; HT.3 CLOSED)
 
 **Post-HT audit-followup Tier 2 institutional reframing — third and final sub-phase; HT.3 CLOSED.** HT.3.3 flips ADR-0002 status `proposed` → `accepted` per HT.1.7 + HT.1.13 + ADR-0005 same-day-acceptance convention precedent. ADR-0002 should have shipped at `status: accepted` directly at HT.1.3 per the convention; the convention crystallized at HT.1.7 (post-HT.1.3); HT.3.3 retrofits the status to bring ADR-0002 into the established convention. Three shipped applications across three languages (HT.1.3 Node.js + HT.1.4 bash + HT.1.5 markdown) confirm the criterion is load-bearing in substrate practice. **No plugin manifest bump** per pure-doc/status-correction convention.
