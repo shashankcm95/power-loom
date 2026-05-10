@@ -32,7 +32,7 @@
 const fs = require('fs');
 const path = require('path');
 const os = require('os');
-const crypto = require('crypto');
+// HT.audit-followup: crypto.randomBytes was used by inline writeAtomic, now in _lib/atomic-write.js
 
 const HOME = os.homedir();
 const COUNTERS_PATH = path.join(HOME, '.claude', 'self-improve-counters.json');
@@ -151,20 +151,13 @@ function loadPending() {
   }
 }
 
-function writeAtomic(filePath, data) {
-  // H.5.3 (CS-3 blair H-1 + kai L-1): tmp suffix was just `.tmp.<pid>` —
-  // collides if two writers in the same process race (e.g., async signal
-  // bumps from a future caller) OR if container PID reuse hits the same
-  // pid. Now: pid + nanosecond hrtime + 8 bytes of crypto randomness.
-  // Birthday-resistance is overkill for this volume but the change is one
-  // line + matches the kb-resolver / pattern-recorder atomic-write idiom.
-  const dir = path.dirname(filePath);
-  fs.mkdirSync(dir, { recursive: true });
-  const nonce = crypto.randomBytes(6).toString('hex');
-  const tmp = `${filePath}.tmp.${process.pid}.${process.hrtime.bigint()}.${nonce}`;
-  fs.writeFileSync(tmp, JSON.stringify(data, null, 2));
-  fs.renameSync(tmp, filePath);
-}
+// HT.audit-followup H4: writeAtomic migrated to `_lib/atomic-write.js` shared
+// primitive. Prior inline impl (H.5.3 CS-3 blair H-1 + kai L-1) used the
+// hardened pid+hrtime+crypto pattern; extracted at audit-followup time
+// because grep surfaced 12 substrate sites using the unhardened pid-only
+// pattern. 3 highest-touched sites (registry.js writeStore + pattern-recorder.js
+// saveStore + session-self-improve-prompt.js writeAtomic) migrate alongside.
+const { writeAtomic } = require('./agent-team/_lib/atomic-write');
 
 function inferKindFromSignal(signal) {
   if (signal.startsWith('filePath:')) return 'observation-log';

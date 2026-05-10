@@ -36,6 +36,18 @@
  *   - '#' not preceded by whitespace (bare scalar like 'a#b') → literal
  *   - '#' inside "..." or '...' → literal
  *   - Trailing whitespace after comment removal is stripped
+ *   - Backslash escapes inside double-quoted scalars (post-audit Tier 1 H1
+ *     fix): per YAML 1.2 spec §7.3.1, '\"' inside a double-quoted scalar is
+ *     an escape sequence for a literal quote; the closing-quote-tracker now
+ *     skips the next character after a backslash so the escape doesn't
+ *     prematurely close inDouble state. Note: this fix prevents silent
+ *     truncation (the prior failure mode) but does NOT translate the escape
+ *     sequence — '\"' is preserved literally in the value, matching the
+ *     parser's existing non-translation of '\n'/'\t'/etc. Full YAML 1.2
+ *     escape-sequence translation is out of scope.
+ *   - Single-quoted scalars do NOT use backslash escapes per YAML 1.2 spec
+ *     §7.3.2; literal apostrophe is '' (doubled). The inSingle state arm
+ *     unchanged.
  *
  * Documented gotcha: inline-array elements containing unquoted '# c'
  * follow YAML 1.2 spec — '#' preceded by whitespace truncates at that
@@ -52,6 +64,9 @@ function _stripInlineComment(val) {
   for (let i = 0; i < val.length; i++) {
     const ch = val[i];
     if (inDouble) {
+      // HT.audit-followup H1: backslash-escaped quote inside double-quoted
+      // scalar — skip the escaped character so '\"' doesn't close inDouble.
+      if (ch === '\\') { i += 1; continue; }
       if (ch === '"') inDouble = false;
       continue;
     }

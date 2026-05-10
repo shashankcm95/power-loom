@@ -17,6 +17,7 @@ const fs = require('fs');
 const path = require('path');
 const os = require('os');
 const { withLock: sharedWithLock } = require('../_lib/lock');
+const { writeAtomic: writeAtomicShared } = require('../_lib/atomic-write');
 const {
   tierOf,
   aggregateQualityFactors,
@@ -96,10 +97,10 @@ function readStore() {
 function withLock(fn) { return sharedWithLock(LOCK_PATH, fn); }
 
 function writeStore(store) {
-  ensureDir();
-  const tmp = STORE_PATH + '.tmp.' + process.pid;
-  fs.writeFileSync(tmp, JSON.stringify(store, null, 2));
-  fs.renameSync(tmp, STORE_PATH);
+  // HT.audit-followup H4: migrated from inline pid-only tmp-suffix
+  // (collision-prone under PID reuse / async-retry race) to `_lib/atomic-write.js`
+  // shared primitive which uses pid + hrtime + crypto nonce.
+  writeAtomicShared(STORE_PATH, store);
 }
 
 function ensureIdentity(store, persona, name) {

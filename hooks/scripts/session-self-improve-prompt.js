@@ -24,6 +24,11 @@ const os = require('os');
 const { spawnSync } = require('child_process');
 const { log } = require('./_log.js');
 const logger = log('session-self-improve-prompt');
+// HT.audit-followup H4: writeAtomic migrated to `_lib/atomic-write.js` shared
+// primitive (pid + hrtime + crypto nonce; collision-resistant under PID-reuse
+// + async-retry races). First cross-tree relative require from hooks/scripts/
+// to scripts/agent-team/_lib/ following the HT.2.3 precedent in session-end-nudge.js.
+const { writeAtomic } = require('../../scripts/agent-team/_lib/atomic-write');
 
 const SESSION_ID = process.env.CLAUDE_SESSION_ID || process.env.CLAUDE_CONVERSATION_ID || String(process.ppid || 'default');
 const PENDING_PATH = path.join(os.homedir(), '.claude', 'checkpoints', 'self-improve-pending.json');
@@ -45,13 +50,8 @@ function loadPending() {
   catch { return null; }
 }
 
-function writeAtomic(filePath, data) {
-  const dir = path.dirname(filePath);
-  fs.mkdirSync(dir, { recursive: true });
-  const tmp = filePath + '.tmp.' + process.pid;
-  fs.writeFileSync(tmp, JSON.stringify(data, null, 2));
-  fs.renameSync(tmp, filePath);
-}
+// writeAtomic — see require at top of file (migrated to `_lib/atomic-write.js`
+// at HT.audit-followup H4)
 
 function buildReminder(candidates) {
   // Group by risk so the user sees auto-graduated (cheap, audit-only) up top

@@ -711,6 +711,20 @@ assertEqual(
   'HT.2.2 strip: # not preceded by whitespace → literal (no strip)'
 );
 
+// Test 9: HT.audit-followup H1 — backslash-escaped quote inside double-quoted
+// scalar does NOT close inDouble state. Prior buggy behavior: `key: "value\" # x"`
+// would close inDouble at the escaped quote, then strip ` # x"` as inline comment,
+// returning the truncated `value\` (silent data corruption). Post-fix: the escape
+// is skipped, inDouble stays true until the real closing quote, the value is
+// preserved as `value\" # x` (parser doesn't translate \" to literal " — full
+// YAML 1.2 escape translation is out of scope; the fix prevents truncation only).
+const fm9 = parseFrontmatter('---\nkey: "value\\" # not a comment"\n---\nbody');
+assertEqual(
+  fm9.frontmatter.key,
+  'value\\" # not a comment',
+  'HT.audit-followup H1: backslash-escaped quote inside double-quoted scalar preserves the escape + does not truncate at # comment'
+);
+
 // ===== Section 9: HT.2.3 _lib/lock.js hooks-discipline-edge fixes (4 tests) =====
 //
 // Added in HT.2.3 (drift-notes 67 + 75). Verifies:

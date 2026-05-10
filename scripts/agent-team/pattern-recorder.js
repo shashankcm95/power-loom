@@ -16,6 +16,7 @@ const fs = require('fs');
 const path = require('path');
 const os = require('os');
 const { acquireLock: sharedAcquireLock, releaseLock: sharedReleaseLock } = require('./_lib/lock');
+const { writeAtomic: writeAtomicShared } = require('./_lib/atomic-write');
 
 // CS-13: env-var override for IRL test isolation. Default keeps prior
 // behavior (~/.claude/agent-patterns.json). Mirrors the env-var-with-default
@@ -63,9 +64,9 @@ function loadStore() {
 }
 
 function saveStore(store) {
-  const tmp = STORE_PATH + '.tmp.' + process.pid;
-  fs.writeFileSync(tmp, JSON.stringify(store, null, 2));
-  fs.renameSync(tmp, STORE_PATH);
+  // HT.audit-followup H4: migrated from inline pid-only tmp-suffix to
+  // `_lib/atomic-write.js` shared primitive (pid + hrtime + crypto nonce).
+  writeAtomicShared(STORE_PATH, store);
 }
 
 function cmdRecord(args) {

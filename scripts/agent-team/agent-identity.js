@@ -47,9 +47,20 @@ function parseArgs(argv) {
   return args;
 }
 
-// Module exports — re-export all 23 symbols from sub-modules so existing
-// `require('./agent-identity.js')` callers (like `_h70-test.js:56` and
-// `_h70-test.js:74`) see the same surface as before HT.1.3 split.
+// Module exports — re-export a purposeful subset of sub-module symbols matching
+// the pre-HT.1.3-split `module.exports` surface. Existing `require('./agent-identity.js')`
+// callers (like `_h70-test.js:56` and `_h70-test.js:74`) see the same surface as
+// before the 5-module split.
+//
+// NOT re-exported (intentionally; full surface is accessible via require of the
+// sub-module directly): CLI handlers other than {cmdAssign, cmdBreed, cmdRecord,
+// cmdRecommendVerification, cmdStats} — i.e., cmdInit, cmdList, cmdPrune,
+// cmdUnretire, cmdAssignChallenger, cmdAssignPair, cmdTier are CLI-only;
+// verification-policy constants (VERIFICATION_POLICY, FULL_VERIFY_POLICY,
+// ASYMMETRIC_CHALLENGER_POLICY, VALID_VERIFICATION_DEPTHS, FULL_EQUIVALENT_DEPTHS);
+// trust-scoring internals (_windowedAvg, _slopeSign, QUALITY_FACTORS_HISTORY_CAP,
+// QUALITY_TREND_FLAT_THRESHOLD_PCT). Per audit Tier 1 H5: prior comment claimed
+// "all 23 symbols" — corrected to "purposeful subset" with explicit non-export list.
 //
 // Symbol-to-module mapping verified against pre-split agent-identity.js
 // module.exports block (HT.1.3-verify code-reviewer Q3).
