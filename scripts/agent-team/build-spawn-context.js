@@ -285,4 +285,9 @@ try {
   process.exit(1);
 }
 
-module.exports = { buildContext, formatText, formatJson };
+// HT.1.9: dropped speculative module.exports block (3 named exports —
+// buildContext, formatText, formatJson — verified empirically as 0-consumer
+// per HT.1.9 pre-validation; all used internally only by the CLI top-level
+// invocation block above). Per backlog Decision (b): delete genuinely
+// unused. Function definitions remain as module-scope for internal CLI use;
+// CLI surface `node build-spawn-context.js --task ...` unchanged.

@@ -77,9 +77,13 @@ function getMirrorAgeDays(mirrorPath) {
   return diffSec / 86400; // seconds per day
 }
 
+// HT.1.9: pruned speculative exports (getMirrorHeadTimestamp,
+// DEFAULT_MARKETPLACE_NAME) from module.exports — verified 0 external
+// consumers. getMirrorHeadTimestamp is used internally by getMirrorAgeDays
+// (line 73); DEFAULT_MARKETPLACE_NAME is used internally by getMirrorRoot
+// (line 31). Both definitions remain as module-scope; only the 2 actually-
+// consumed functions (getMirrorRoot + getMirrorAgeDays) are the public API.
 module.exports = {
   getMirrorRoot,
-  getMirrorHeadTimestamp,
   getMirrorAgeDays,
-  DEFAULT_MARKETPLACE_NAME,
 };

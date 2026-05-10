@@ -67,9 +67,13 @@ function getRegisteredMarketplaces() {
   return Object.keys(settings.extraKnownMarketplaces);
 }
 
+// HT.1.9: pruned speculative exports (readSettings, SETTINGS_PATH) from
+// module.exports — verified 0 external consumers. readSettings is used
+// internally by isPluginEnabled (line 47) + getRegisteredMarketplaces (line
+// 65); SETTINGS_PATH is used internally by readSettings (line 28). Both
+// definitions remain as module-scope; only the 2 actually-consumed functions
+// (isPluginEnabled + getRegisteredMarketplaces) are the public API.
 module.exports = {
-  readSettings,
   isPluginEnabled,
   getRegisteredMarketplaces,
-  SETTINGS_PATH,
 };

@@ -299,5 +299,10 @@ switch (cmd) {
     process.exit(1);
 }
 
-// Export for testing / programmatic use
-module.exports = { loadAllAdrs, isActive, findAdrById };
+// HT.1.9: dropped speculative module.exports block (3 named exports —
+// loadAllAdrs, isActive, findAdrById — verified empirically as 0-consumer
+// per HT.1.9 pre-validation; all used internally only by cmdList/cmdRead/
+// cmdActive/cmdTouchedBy. validate-adr-drift.js consumes adr.js via
+// subprocess CLI `touched-by`, NOT via require). Per backlog Decision (b):
+// delete genuinely unused. Function definitions remain as module-scope for
+// internal CLI use; CLI surface unchanged.

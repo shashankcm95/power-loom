@@ -534,5 +534,12 @@ switch (cmd) {
     process.exit(1);
 }
 
-// Export for testing / programmatic use
-module.exports = { detect, detectSignals, combineRefs, recommendTier, ROUTING_RULES };
+// HT.1.9: dropped speculative module.exports block (5 named exports —
+// detect, detectSignals, combineRefs, recommendTier, ROUTING_RULES — verified
+// empirically as 0-consumer per HT.1.9 pre-validation; all used internally
+// only. Test 57 in tests/smoke-h8.sh invokes `architecture-relevance-detector.js
+// list-signals` via CLI subprocess (NOT via require). Per backlog Decision
+// (b): delete genuinely unused. Function/constant definitions remain as
+// module-scope for internal CLI use; CLI surface
+// `node architecture-relevance-detector.js detect --task ...` + `list-signals`
+// unchanged.

@@ -119,8 +119,9 @@ function main() {
 
 if (require.main === module) main();
 
-module.exports = {
-  buildSection,
-  appendSection,
-  PRE_APPROVAL_HEADER,
-};
+// HT.1.9: dropped speculative module.exports block (3 named exports —
+// buildSection, appendSection, PRE_APPROVAL_HEADER — verified empirically as
+// 0-consumer per HT.1.9 pre-validation; all used internally only by main()).
+// Per backlog Decision (b): delete genuinely unused. Function/constant
+// definitions remain as module-scope for internal CLI use; CLI surface
+// `node verify-plan-spawn.js <plan-path>` unchanged.

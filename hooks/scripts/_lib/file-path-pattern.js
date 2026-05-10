@@ -54,4 +54,9 @@ function extractFilePaths(text) {
   return paths;
 }
 
-module.exports = { extractFilePaths, UNIX_PATH, WINDOWS_PATH, QUOTED_PATH };
+// HT.1.9: pruned speculative regex constants (UNIX_PATH, WINDOWS_PATH,
+// QUOTED_PATH) from module.exports — verified 0 external consumers; used
+// internally only by extractFilePaths (lines 51-53). Constants remain as
+// module-scope `const` for internal use; only `extractFilePaths` is the
+// public API.
+module.exports = { extractFilePaths };

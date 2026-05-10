@@ -8,6 +8,72 @@ For granular per-phase detail, see annotated tags `phase-H.x.y` and `swarm/H.x.y
 
 ---
 
+## [unreleased] — 2026-05-10 — HT.1.9 Speculative-API exports cleanup sweep
+
+**Hardening Track refactor 9 of N.** Mechanical sweep converging substrate export-surface — drops 21 speculative-API exports across 7 files. Closes HT.0.1 D-finding (3 hooks/_lib/ modules with 7 speculative exports) + HT.0.2 D-finding (4 substrate scripts with 0-consumer module.exports) + HT.0.6 E-finding (`adr.js` exports with 0 external callers). **No version bump** per pure-refactor convention (matches HT.1.2 + HT.1.8 precedents).
+
+### Changed
+
+- **4 standalone substrate scripts — DROPPED `module.exports` block entirely** (14 named exports; 0-consumer per empirical pre-validation; all used internally only):
+  - `scripts/agent-team/verify-plan-spawn.js` — dropped 3 exports (`buildSection`, `appendSection`, `PRE_APPROVAL_HEADER`)
+  - `scripts/agent-team/adr.js` — dropped 3 exports (`loadAllAdrs`, `isActive`, `findAdrById`); `validate-adr-drift.js` consumes adr.js via subprocess CLI `touched-by`, NOT via require
+  - `scripts/agent-team/build-spawn-context.js` — dropped 3 exports (`buildContext`, `formatText`, `formatJson`)
+  - `scripts/agent-team/architecture-relevance-detector.js` — dropped 5 exports (`detect`, `detectSignals`, `combineRefs`, `recommendTier`, `ROUTING_RULES`); test 57 in tests/smoke-h8.sh invokes via CLI subprocess `list-signals`, NOT via require
+
+- **3 hooks/_lib/ modules — PRUNED `module.exports`** (7 speculative exports dropped; 5 actually-consumed exports preserved as public API; speculative definitions remain as module-scope for internal use):
+  - `hooks/scripts/_lib/file-path-pattern.js` — kept `extractFilePaths` (2 consumers); dropped `UNIX_PATH`, `WINDOWS_PATH`, `QUOTED_PATH` (used internally only by `extractFilePaths` lines 51-53)
+  - `hooks/scripts/_lib/marketplace-state-reader.js` — kept `getMirrorRoot`, `getMirrorAgeDays` (1 consumer each); dropped `getMirrorHeadTimestamp` (used internally by `getMirrorAgeDays` line 73), `DEFAULT_MARKETPLACE_NAME` (used internally by `getMirrorRoot` line 31)
+  - `hooks/scripts/_lib/settings-reader.js` — kept `isPluginEnabled`, `getRegisteredMarketplaces` (1 consumer each); dropped `readSettings` (used internally by both kept functions), `SETTINGS_PATH` (used internally by `readSettings` line 28)
+
+### Drift-note 68 (NEW; deferred to HT.2 sweep)
+
+**Title**: `contracts-validate.js:53` `SETTINGS_READER` constant is dead code
+
+**Source**: HT.1.9 empirical pre-validation surfaced this — `contracts-validate.js:51-53` defines `const SETTINGS_READER = path.join(...)` with header comment "settings-reader for the new contract-plugin-hook-deployment validator" but never `require()`s the constant. The header claim "Used by ... contracts-validate.js" in `settings-reader.js:3` is documentary lie.
+
+**Why deferred**: out of HT.1.9 scope (HT.1.9 is about converging EXPORTS, not pruning DEAD CONSUMER CODE). HT.2 sweep target — adds to drift-notes 63 + 64 + 65 + 66 + 67 + 69 cohort.
+
+### Drift-note 69 (NEW; deferred to HT.2 sweep)
+
+**Title**: `settings-reader.js:3` header comment references retired `plugin-loaded-check.js`
+
+**Source**: `settings-reader.js:3` says "Used by plugin-loaded-check.js (a hook) and contracts-validate.js (a substrate script)" but `plugin-loaded-check.js` was retired at H.7.26 (per HT.0.7 audit). The header documentation is stale.
+
+**Why deferred**: doc-lag fix; HT.2 sweep candidate. Sibling concern with drift-note 68 — both are in `settings-reader.js` documentary surface.
+
+### Methodology
+
+**Sub-plan-only** — mechanical sweep against well-bounded empirical inventory; no fresh design surface (per-export consumer counts verified empirically; no ambiguity about which exports are speculative); no schema change; no institutional discipline encoding. Matches HT.1.2 + HT.1.4 + HT.1.6 + HT.1.8 sub-plan-only precedents. Per-phase pre-approval gate skipped with EXPLICIT decision rationale matrix in sub-plan per HT.1.6 convention.
+
+**Empirical pre-validation gate applied per HT.1.8 dogfooded pattern** — per-export consumer counts verified BEFORE sub-plan flips draft → approved. Pre-validation surfaced drift-notes 68 + 69 at sub-plan time rather than during-implementation discovery; 100% green first-pass verification (second consecutive HT.1 phase using the pattern).
+
+### Verification
+
+- **70/70 install.sh smoke tests** (unchanged from HT.1.8 — pure refactor; no test count delta; CLI surfaces preserved by design)
+- **46/46 _h70-test.js asserts** (regression check; HT.1.9 doesn't touch agent-identity / its sub-modules)
+- **0 contracts-validate violations** excluding pre-existing 16 baseline
+- **7-site CLI smoke**: `adr.js list` (count=3); `architecture-relevance-detector.js list-signals` (rule_count=21); `build-spawn-context.js --task test --format json` (task echoed); `verify-plan-spawn.js` loads via require cleanly (require.main check skips main()); 3 hooks/_lib/ modules load + export only their consumed surface
+
+### Why this matters
+
+- **Closes HT.0.1 + HT.0.2 + HT.0.6 speculative-API findings** as institutional discipline
+- **Forty-ninth distinct phase shape** in the HT track: substrate export-surface convergence + speculative-API resolution + 2 drift-notes captured at sub-plan time via empirical pre-validation
+- **The empirical pre-validation pattern is now 2-phase confirmed** (HT.1.8 + HT.1.9): pre-validate sub-plan completeness via empirical smoke before sub-plan flips draft → approved; surfaces inventory drift at sub-plan time rather than during-implementation discovery; 100% green first-pass verification both phases
+
+### Plugin manifest
+
+`1.11.2` unchanged (no version bump per pure-refactor convention; matches HT.1.2 + HT.1.8 precedents).
+
+### Out of scope (deferred)
+
+- Dead consumer code in `contracts-validate.js:53` (drift-note 68; HT.2 sweep)
+- Stale header in `settings-reader.js:3` (drift-note 69; HT.2 sweep)
+- HOOK lock-primitive migrations (drift-note 67; HT.2)
+- Per-module unit tests for the modified modules
+- agent-identity.js `__test_internals__` subcommand — preserved as test surface for `_h70-test.js`
+
+---
+
 ## [unreleased] — 2026-05-10 — HT.1.8 `withLock` DRY consolidation
 
 **Hardening Track refactor 8 of N.** Mechanical DRY consolidation of lock primitive across 3 substrate scripts. Closes HT.0.2 D.4 finding (3-site DRY divergence post-`_lib/lock.js` extraction at H.3.2) + HT.0.8 Trajectory.2 confirmation. **No version bump** per pure-refactor convention (matches HT.1.2 parseFrontmatter DRY precedent — substrate-internal restructuring; no consumer-visible surface change).
