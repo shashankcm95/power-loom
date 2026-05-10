@@ -1,8 +1,10 @@
 ---
-last_updated: 2026-05-10T17:45:00-07:00
-last_session_phase: HT.1.2 SHIPPED — parseFrontmatter DRY consolidation (4 inline copies → require helper); 66/66 install.sh smoke unchanged; HT.1.3 next (substantive sub-plan)
+last_updated: 2026-05-10T18:00:00-07:00
+last_session_phase: HT.1.2 SHIPPED + HT.1.3 Option A decision logged (user-approved 2026-05-10) — parseFrontmatter DRY consolidation done; HT.1.3 will run sub-plan + per-phase pre-approval + 5-module split per Option A; /compact requested
 git_branch_at_last_save: ht/1.2-parsefrontmatter-dry
-git_commit_at_last_save: 9a487ae
+git_commit_at_last_save: 6bab282
+ht_1_3_decision: Option A — sub-plan + ADR-0002 + parallel architect+code-reviewer pre-approval + 5-module split (user-approved 2026-05-10)
+ht_1_3_branch_target: ht/1.3-agent-identity-split (cut from ht/1.2-parsefrontmatter-dry HEAD post-/compact)
 master_plan: swarm/thoughts/shared/plans/2026-05-09-HT.0-hardening-track-master-plan.md
 master_plan_status: approved
 v3_revision_pre_approval_run: ht0-master-plan-review-20260509-141613
@@ -276,29 +278,29 @@ Soft items for HT-end retrospective:
 
 ## Next concrete step
 
-**Begin HT.1.3 — `agent-identity.js` articulate-or-split (SUBSTANTIVE sub-plan phase).** Per HT.1 backlog (status: approved; lines 109-119 of `swarm/thoughts/shared/plans/2026-05-09-HT.1-refactor-backlog.md`); HT.0.9-verify code-reviewer PASS verdict on 1698 LoC + 5-responsibility breakdown:
+**Begin HT.1.3 — `agent-identity.js` articulate-or-split (SUBSTANTIVE sub-plan phase; OPTION A CHOSEN).** Per HT.1 backlog (status: approved; lines 109-119 of `swarm/thoughts/shared/plans/2026-05-09-HT.1-refactor-backlog.md`); HT.0.9-verify code-reviewer PASS verdict on 1698 LoC + 5-responsibility breakdown.
 
-1. (Session continuation per relaxed branch discipline B; user-approved 2026-05-10 — HT.1 sequence batches commits on per-phase branches; PRs land as a stack later. Same-session continuation is empirically favorable per HT.1.1 + HT.1.2 dogfood.)
-2. **Decision-required first**: per-phase pre-approval recommended at HT.1.3 (the only substantive sub-plan + ADR + 5-module-split phase in the HT.1 sequence). Either:
-   - **Option A**: author sub-plan + ADR-0002 in plan-mode → spawn parallel architect (subagent_type: architect) + code-reviewer (subagent_type: code-reviewer) for pre-approval per drift-note 40 codification → absorb FLAGs → proceed to implementation
-   - **Option B**: skip per-phase pre-approval (relaxed discipline; relies on HT.0.9-verify's prior validation of 1698 LoC + 5-responsibility breakdown PASS)
-   - Recommendation: **Option A** for HT.1.3 specifically because (a) ADR-0002 is forward-looking institutional discipline (the bridge-script entrypoint criterion); (b) 5-module split is non-trivial; (c) HT.0.9-verify only validated the WHAT (1698 LoC + 5 responsibilities exist); the HOW (boundaries between modules; ADR shape; interface preservation) is fresh design surface. Per-phase pre-approval cost ~30-45 min wallclock for the catch-on-the-design upside.
+**DECISION LOGGED (user-approved 2026-05-10)**: Option A — author sub-plan + ADR-0002 in plan-mode → spawn parallel architect (subagent_type: architect) + code-reviewer (subagent_type: code-reviewer) for per-phase pre-approval per drift-note 40 codification → absorb FLAGs → implement 5-module split. Rationale: (a) ADR-0002 is forward-looking institutional discipline (the bridge-script entrypoint criterion); (b) 5-module split is non-trivial; (c) HT.0.9-verify only validated the WHAT (1698 LoC + 5 responsibilities exist); the HOW (boundaries between modules; ADR shape; interface preservation) is fresh design surface. Per-phase pre-approval cost ~30-45 min wallclock for the catch-on-the-design upside.
 
-3. Read HT.1.3 spec at backlog lines 109-119 (~1K tokens cached) + master plan v3.1 sub-plan methodology (lines 405-422)
-4. Read `scripts/agent-team/agent-identity.js` (1698 LoC; chunked Read 4-5 batches at offsets 1-400, 400-800, 800-1200, 1200-1600, 1600-1698)
-5. Identify 5-module boundaries empirically:
+**EXECUTION PLAN (Option A)**:
+
+1. (Post-/compact-fresh session per user-requested compaction after HT.1.2 ship + Option A decision logged. Branch discipline: relaxed B per user-approval 2026-05-10. Cut `ht/1.3-agent-identity-split` from `ht/1.2-parsefrontmatter-dry` HEAD = commit `6bab282`.)
+2. Read HT.1.3 spec at backlog lines 109-119 (~1K tokens cached) + master plan v3.1 sub-plan methodology (lines 405-422)
+3. Read `scripts/agent-team/agent-identity.js` (1698 LoC; chunked Read 4-5 batches at offsets 1-400, 400-800, 800-1200, 1200-1600, 1600-1698)
+4. Identify 5-module boundaries empirically:
    - Registry CRUD: `ensureDir`, `emptyStore`, `readStore`, `writeStore`, `ensureIdentity`, `cmdInit`, `cmdList`, `cmdPrune`, `cmdUnretire`
    - Verdict recording: `cmdRecord` (line 1159)
    - Trust-score computation: `aggregateQualityFactors`, `computeTaskComplexityWeightedPass`, `computeRecencyDecay`, `computeQualityTrend`, `normalizeAxis`, `computeWeightedTrustScore`, `_windowedAvg`, `_slopeSign`, `bucketTaskComplexity`
    - Verification policy: `cmdRecommendVerification`, `_computeRecommendation`, `VERIFICATION_POLICY` constants, `cmdTier`
    - Lifecycle/spawn: `cmdAssign`, `cmdAssignChallenger`, `cmdAssignPair`, `cmdBreed`
-6. Author sub-plan at `swarm/thoughts/shared/plans/2026-05-XX-HT.1.3-agent-identity-split.md` documenting: ADR-0002 shape (bridge-script entrypoint criterion); 5-module boundaries; CLI interface preservation strategy; test surface impact; rollback shape; estimated ~3-5 days end-to-end (per HT.1 backlog Description)
+5. Enter plan mode (`ExitPlanMode` available for the sub-plan + ADR shape decision)
+6. Author sub-plan at `swarm/thoughts/shared/plans/2026-05-10-HT.1.3-agent-identity-split.md` documenting: ADR-0002 shape (bridge-script entrypoint criterion); 5-module boundaries with file path proposals; CLI interface preservation strategy (likely: agent-identity.js becomes thin dispatcher routing subcommands to module files; OR: fully splits with no central dispatcher); test surface impact (tests using `agent-identity.js` CLI shouldn't break; module-internal tests new surface); rollback shape; estimated ~3-5 days end-to-end if implemented in single phase OR split-then-iterate per backlog Description
 7. Run forbidden-phrase grep gate on sub-plan (research-artifact-scoped per master plan v3.1 line 165; 4th carve-out form for plan-mode prescriptive language per HT.0.9-verify FLAG-7 validation)
-8. **Per-phase pre-approval gate** (Option A): spawn parallel architect + code-reviewer per HT.0.9-verify methodology
-9. Absorb FLAGs into sub-plan
-10. Author ADR-0002 at `swarm/adrs/0002-bridge-script-entrypoint-criterion.md` per `_TEMPLATE.md` shape
+8. **Per-phase pre-approval gate (Option A)**: spawn parallel architect + code-reviewer per HT.0.9-verify methodology. Each spawn receives self-contained prompt with: (a) sub-plan path; (b) HT.1 backlog reference; (c) HT.0.9-verify pre-validation context (1698 LoC + 5-responsibility PASS); (d) 4-6 specific validation questions per spawn. Architect validates: 5-module boundaries coherent? ADR-0002 shape adequate as forward-looking institutional discipline? CLI preservation strategy sound? Rollback path identified? Code-reviewer validates: per-function module assignment matches actual code structure? CLI subcommand-to-module mapping complete? import/export interface clean? test surface gaps identified?
+9. Absorb FLAGs into sub-plan; flip status: draft → approved
+10. Author ADR-0002 at `swarm/adrs/0002-bridge-script-entrypoint-criterion.md` per `_TEMPLATE.md` shape; document the institutional decision (when does multi-responsibility-at-bridge-script accumulate vs when does split apply?)
 11. Implement 5-module split per sub-plan boundaries (preserves CLI interface; agent-identity.js becomes thin dispatcher OR fully splits per ADR decision)
-12. Update tests (install.sh + _h70-test.js as needed); preserve CLI behavior end-to-end
+12. Update tests (install.sh + _h70-test.js as needed); preserve CLI behavior end-to-end via the existing test surface
 13. Update SKILL.md ledger + CHANGELOG + plugin.json (likely minor bump 1.9.1 → 1.10.0; new module surface)
 14. Update HT-state.md cutover; chain HT.1.4 methodology
 
@@ -310,11 +312,11 @@ Soft items for HT-end retrospective:
 
 **Resume tip from HT.1.2 dogfood**: HT.1.2 implementation took ~15 min wallclock end-to-end (4 mechanical migrations + 3-tier verification + cutover). The HT.0.9-verify code-reviewer FLAG-1 corrected enumeration (4 sites with documented shape variations) paid off — execution found exactly the documented sites with the documented shapes; zero surprises. Pattern: per-item file:line + return-shape validations from HT.0.9-verify continue to pay across HT.1.N execution; HT.1.3 will benefit similarly from the PASS verdict on 1698 LoC + 5-responsibility breakdown.
 
-**/compact recommendation before HT.1.3**: depends on HT.1.3 path. **Option A path** (sub-plan + per-phase pre-approval + spawn coordination + 5-module split) totals ~50-80K tax; current session at ~30-40% utilization; recommend /compact before HT.1.3 if pursuing Option A in same session. **Option B path** (skip pre-approval; straight to implementation) totals ~30-50K tax; same-session continuation likely fine. **If splitting**: complete sub-plan + pre-approval in this session (~50K tax → ~80% utilization); /compact before implementation phase.
+**/compact status**: **/compact REQUESTED by user 2026-05-10 after Option A decision logged.** Post-/compact-fresh session starts HT.1.3 Option A path with full execution budget. Expected cost: ~10-15% at session start; sub-plan authoring + per-phase pre-approval spawns + FLAG absorption land at ~50-65%; implementation phase + 3-tier verification + cutover land at ~70-85%. Recommend /compact between sub-plan-approved and implementation-start IF utilization > 60% at sub-plan ship time.
 
-**Cumulative token cost expected for HT.1.3**: depends on Option A vs B and same-session vs split. Conservative: ~30-40% utilization at start (current session continuous); ~70-85% at end (substantive phase regardless of option choice).
+**Cumulative token cost expected for HT.1.3**: ~10-15% utilization at start (post-/compact-fresh); ~70-85% at end (substantive phase: sub-plan + per-phase pre-approval + 5-module split + tests + cutover). Possible single-session split between sub-plan-approved checkpoint and implementation start if approaching ceiling.
 
-**Calibration honesty note (per user pushback at HT.1.1; carried forward)**: prior /compact recommendations were chronically pessimistic by ~2-3×. Recalibrated thresholds: post-/compact-fresh starts at ~10-15%; per-spawn-context tax ~5-10K; per-FLAG-absorption tax ~3-5K; per-Edit-batch tax ~1-2K each. The cached-HT-state methodology is the load-bearing simplifier. Honest /compact threshold: current utilization > 60% AND next-phase tax > 30K. **HT.1.3 is the first phase in HT.1 sequence likely to genuinely warrant /compact.**
+**Calibration honesty note (per user pushback at HT.1.1; carried forward)**: prior /compact recommendations were chronically pessimistic by ~2-3×. Recalibrated thresholds: post-/compact-fresh starts at ~10-15%; per-spawn-context tax ~5-10K; per-FLAG-absorption tax ~3-5K; per-Edit-batch tax ~1-2K each. The cached-HT-state methodology is the load-bearing simplifier. Honest /compact threshold: current utilization > 60% AND next-phase tax > 30K. **HT.1.3 is the first phase in HT.1 sequence to genuinely warrant /compact** (validated by user request 2026-05-10).
 
 ---
 
