@@ -2,6 +2,82 @@
 
 Deferred work from prior phases, captured here so nothing important gets silently dropped. Each entry: scope, rationale, dependencies, rough estimate.
 
+## Phase HT.1.6 — Documentary persona class + roster shape — DECISION RECORD (lightweight)
+
+**Status**: shipped 2026-05-10. First `decision-record-pattern: lightweight` entry in BACKLOG.md per HT.0.9-verify architect FLAG-5 right-sizing (ADR-system-bloat avoidance: original sub-plan draft proposed ADR-0003 for documentary persona class; downgraded to lightweight BACKLOG entry because the discipline is bounded to one persona class with N=3 instances and doesn't need full ADR institutional weight).
+
+### Documentary persona class shape
+
+Per H.8.6 RPI doctrine adoption from [humanlayer/advanced-context-engineering-for-coding-agents](https://github.com/humanlayer/advanced-context-engineering-for-coding-agents): three documentary personas (14-codebase-locator + 15-codebase-analyzer + 16-codebase-pattern-finder) describe what exists in a codebase as a triad — WHERE / HOW / EXISTING-PATTERNS — without critique.
+
+| Persona | Question answered | Forbidden behavior |
+|---------|-------------------|--------------------|
+| 14-codebase-locator | WHERE does X live? | Suggest where X *should* live; critique file organization |
+| 15-codebase-analyzer | HOW does X work? | Critique implementation; flag bugs; suggest refactoring |
+| 16-codebase-pattern-finder | What patterns exist for X? | Recommend which pattern to use; rank by quality |
+
+Class-shape invariants (codified in contracts at HT.1.1; persona MDs at HT.1.6):
+
+- `documentary: true` flag in contract
+- `_documentary_note` field documenting the discipline
+- Skills: `required: ["research-mode"]` (canonical citation discipline)
+- `kb_scope.default: ["kb:hets/spawn-conventions"]` (uniform spawn-time prefix)
+- F3 functional check: `hasFileCitations` with `min: 5`
+- A4 antiPattern check: `noCritiqueLanguage` with persona-specific `forbidden_phrases` list
+- `fallbackAcceptable`: surface critique-territory as handoff to architect/code-reviewer (NOT editorialize)
+
+### Roster shape (drift-note 60 sub-decision 3 + drift-note 65 resolution)
+
+**HT.0.9-verify chose** (parent plan line 160): "documentary personas could (a) join DEFAULT_ROSTERS, (b) keep `persona: <fixed>` shape, or (c) adopt `<set-at-spawn>` shape. Decision: (b)"
+
+**HT.1.6 empirical finding** (drift-note 65): the 3-option block collapsed two independent axes:
+
+- **Axis 1: contract `persona` field shape** — alternatives are (b) fixed string vs (c) `<set-at-spawn>` placeholder. HT.0.9-verify chose (b).
+- **Axis 2: DEFAULT_ROSTERS membership** — independent decision; orthogonal to axis 1. HT.0.9-verify did not address this axis explicitly; the substrate state was DEFAULT_ROSTERS-absent until HT.1.6.
+
+**HT.1.6 resolves**: chose (a) AND (b) together (independent axes, both required for /research runtime correctness):
+
+- Contract `persona` field: fixed string `"14-codebase-locator"` (axis 1 = option b; per HT.0.9-verify; unchanged)
+- DEFAULT_ROSTERS membership: yes, with 3-name rosters per existing convention (axis 2 = option a; new at HT.1.6)
+
+Roster names:
+```javascript
+'14-codebase-locator':   ['scout', 'nav', 'atlas'],   // wayfinding theme
+'15-codebase-analyzer':  ['lex', 'dex', 'kit'],        // analytical theme
+'16-codebase-pattern-finder': ['vega', 'nori', 'pip'], // pattern-spotting theme
+```
+
+### Drift-notes captured during HT.1.6
+
+- **Drift-note 65**: HT.0.9-verify decision-block 3-option collapse — two independent axes presented as mutually exclusive alternatives. HT.2 sweep candidate: scan all HT.1 backlog 3-option Decision blocks for sibling axis-conflation patterns.
+- **Drift-note 66** (sibling of drift-note 65; same root cause = no integration test exercises /research's spawn flow): `commands/research.md:62-67` used `jq -r '.full'` but assign output JSON has `.identity` field, not `.full`. Pre-existing H.8.6 documentation error masked by the same integration-test gap as drift-note 65.
+
+### What landed
+
+| Sub-phase | Scope | Key files |
+|-----------|-------|-----------|
+| 1 | Sub-plan + drift-note 65 capture | `swarm/thoughts/shared/plans/2026-05-10-HT.1.6-documentary-persona-md.md` (status: approved; sub-plan-only methodology per HT.1.4 precedent) |
+| 2a | 3 NEW persona MDs | `swarm/personas/14-codebase-locator.md` (68 LoC), `15-codebase-analyzer.md` (70 LoC), `16-codebase-pattern-finder.md` (68 LoC); auditor-class structural shape adapted for documentary discipline |
+| 2b | 3 NEW DEFAULT_ROSTERS entries | `scripts/agent-team/identity/registry.js` lines 51-58 (post-`13-node-backend`; new "Documentary family" comment block) |
+| 2c | 3-line fix to /research jq path (drift-note 66) | `commands/research.md:63,65,67` `.full` → `.identity` |
+| 2d | NEW install.sh smoke test 72 | `tests/smoke-ht.sh` — exercises cmdAssign on documentary persona + asserts `.identity` extraction works (closes integration-test gap that masked drift-notes 65 + 66) |
+| 2e | This BACKLOG.md decision-record-pattern entry | `skills/agent-team/BACKLOG.md` (this section) |
+| 3 | Manifest bump + cutover | `plugin.json` 1.11.0 → 1.11.1 (patch — additive substrate fix); SKILL.md / CHANGELOG.md / HT-state.md ledgers |
+
+### Verification
+
+- 68/68 install.sh smoke (was 67/67; +1 test 72)
+- 46/46 _h70-test.js asserts (regression check; HT.1.6 doesn't touch trust-scoring / verdict / lifecycle paths beyond DEFAULT_ROSTERS additions which _h70-test.js consumes as-is via `ai.DEFAULT_ROSTERS`)
+- 0 contracts-validate violations excluding pre-existing 16 baseline
+- `assign --persona 14-codebase-locator` returns valid identity from {scout, nav, atlas} roster
+- Same for 15-codebase-analyzer + 16-codebase-pattern-finder
+
+### Why lightweight BACKLOG entry vs full ADR
+
+ADR institutional weight is appropriate when the decision is forward-looking + cross-cutting + likely-to-recur (e.g., ADR-0001 fail-open hook discipline applies to 14+ hooks; ADR-0002 bridge-script entrypoint criterion applies across HT.1.3 + HT.1.4 + HT.1.5 + future bridge-scripts). HT.1.6's documentary persona class shape is bounded to N=3 instances (14/15/16) with no expected expansion — the H.8.6 RPI doctrine doesn't envision a 4th documentary persona type. ADR-0003 would have been over-formalized; lightweight BACKLOG entry preserves the decision record without cluttering the ADR institutional ledger.
+
+Per HT.0.9-verify FLAG-5 right-sizing, this is the first of 3 lightweight BACKLOG entries planned across HT.1 (HT.1.6 + HT.1.12 deferred-author-intent precedent + HT.1.15 helper-deletion canonical pattern).
+
 ## Phase H.8.4 — Shell injection RCE fix + Cyrillic homograph fix + routing rule count correction — SHIPPED
 
 **Status**: shipped. Hot-fix execution by 12-security-engineer.mio in response to chaos run chaos-20260508-191611-h83-trilogy. Pre-approval by 04-architect.mira + 03-code-reviewer.jade with NEEDS-REVISION; revised plan applied.

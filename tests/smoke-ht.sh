@@ -4,13 +4,14 @@
 # $passed and $failed counters via bash lexical-scope inheritance.
 #
 # Per HT.1.4 (ADR-0002 cross-language application — bash sourced-file
-# post-split shape). Test count: 4 (tests 69-70 — HT.1.1 noCritiqueLanguage;
-# test 71 — HT.1.5 build-team-helpers.sh dispatch; test 65 — H.8.7 adr.js
-# symlink defense, intentional trailer position per HT.0.7 audit anomaly
-# preservation).
+# post-split shape). Test count: 5 (tests 69-70 — HT.1.1 noCritiqueLanguage;
+# test 71 — HT.1.5 build-team-helpers.sh dispatch; test 72 — HT.1.6
+# documentary persona DEFAULT_ROSTERS + /research path-extraction integration;
+# test 65 — H.8.7 adr.js symlink defense, intentional trailer position per
+# HT.0.7 audit anomaly preservation).
 #
-# Source order: tests 69, 70, 71 first (HT.1.x phase tests in numeric order),
-# then test 65 (H.8.7 trailer) last — preserves the original execution
+# Source order: tests 69, 70, 71, 72 first (HT.1.x phase tests in numeric
+# order), then test 65 (H.8.7 trailer) last — preserves the original execution
 # order of run_smoke_tests pre-extraction.
 #
 # DO NOT execute directly — depends on parent-scope `local passed`,
@@ -119,6 +120,40 @@ EOF
       failed=$((failed + 1))
     fi
   fi
+
+  # Test 72: HT.1.6 — documentary persona DEFAULT_ROSTERS + /research path-extraction
+  # integration smoke. Closes the integration-test gap that masked drift-notes 65 + 66.
+  # Asserts: (a) cmdAssign returns valid identity for 14-codebase-locator (DEFAULT_ROSTERS
+  # entry exists post-HT.1.6); (b) `jq -r '.identity'` extracts the full identity string
+  # (commands/research.md path-extraction works post-HT.1.6 .full → .identity fix).
+  echo -n "  Test 72 (HT.1.6 documentary persona DEFAULT_ROSTERS + /research integration): "
+  T72_STORE=$(mktemp -u)
+  HETS_IDENTITY_STORE="$T72_STORE" node "$SCRIPT_DIR/scripts/agent-team/agent-identity.js" init >/dev/null 2>&1
+  T72_OUT=$(HETS_IDENTITY_STORE="$T72_STORE" node "$SCRIPT_DIR/scripts/agent-team/agent-identity.js" assign --persona 14-codebase-locator --task ht-1-6-test 2>&1)
+  T72_IDENTITY=$(echo "$T72_OUT" | python3 -c "import json,sys; print(json.load(sys.stdin).get('identity', ''))" 2>/dev/null)
+  T72_PERSONA=$(echo "$T72_OUT" | python3 -c "import json,sys; print(json.load(sys.stdin).get('persona', ''))" 2>/dev/null)
+  # Use if-form to bypass install.sh's `set -e` propagation when grep finds 0 matches
+  # (grep -c emits "0" + exits 1; combined with `|| echo "?"` the substitution would
+  # capture both grep's "0" + echo's "?" = "0\n?" which breaks string equality below).
+  T72_RESEARCH_FULL_REFS=0
+  if grep -q "jq -r '\.full'" "$SCRIPT_DIR/commands/research.md" 2>/dev/null; then
+    T72_RESEARCH_FULL_REFS=$(grep -c "jq -r '\.full'" "$SCRIPT_DIR/commands/research.md")
+  fi
+  T72_RESEARCH_IDENTITY_REFS=0
+  if grep -q "jq -r '\.identity'" "$SCRIPT_DIR/commands/research.md" 2>/dev/null; then
+    T72_RESEARCH_IDENTITY_REFS=$(grep -c "jq -r '\.identity'" "$SCRIPT_DIR/commands/research.md")
+  fi
+  if [ "$T72_PERSONA" = "14-codebase-locator" ] \
+      && echo "$T72_IDENTITY" | grep -qE "^14-codebase-locator\.(scout|nav|atlas)$" \
+      && [ "$T72_RESEARCH_FULL_REFS" = "0" ] \
+      && [ "$T72_RESEARCH_IDENTITY_REFS" -ge "3" ]; then
+    echo "OK (assign returns 14-codebase-locator.<roster-name>; research.md uses .identity not .full × 3)"
+    passed=$((passed + 1))
+  else
+    echo "FAIL: persona='$T72_PERSONA' identity='$T72_IDENTITY' research.md_full=$T72_RESEARCH_FULL_REFS research.md_identity=$T72_RESEARCH_IDENTITY_REFS"
+    failed=$((failed + 1))
+  fi
+  rm -f "$T72_STORE"
 
   # Test 65: H.8.7 — adr.js symlink defense (chaos M3)
   echo -n "  Test 65 (H.8.7 adr.js symlink defense; symlink in ADRS_DIR ignored): "

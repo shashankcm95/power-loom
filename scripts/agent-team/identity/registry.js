@@ -49,6 +49,13 @@ const DEFAULT_ROSTERS = {
   '11-data-engineer': ['fin', 'niko', 'rae'],
   '12-security-engineer': ['vlad', 'mio', 'eli'],
   '13-node-backend': ['noor', 'evan', 'kira'],
+  // Documentary family (research-focused, H.8.6+ via /research; HT.1.6 — closes
+  // drift-note 60 sub-decision 3 + drift-note 65 option-axis-conflation finding:
+  // contracts ship at H.8.6 with `persona: <fixed>` shape but DEFAULT_ROSTERS
+  // membership was independent axis silently left absent until HT.1.6).
+  '14-codebase-locator': ['scout', 'nav', 'atlas'],
+  '15-codebase-analyzer': ['lex', 'dex', 'kit'],
+  '16-codebase-pattern-finder': ['vega', 'nori', 'pip'],
 };
 
 // H.6.6 — lifecycle thresholds (prune defaults).
