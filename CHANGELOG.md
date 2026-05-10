@@ -8,6 +8,90 @@ For granular per-phase detail, see annotated tags `phase-H.x.y` and `swarm/H.x.y
 
 ---
 
+## [unreleased] — 2026-05-11 — HT.2.5 final sweep + soak gate readiness readout (HT.2 CLOSED; verdict GREEN)
+
+**Hardening Track CLOSED.** HT.2.5 is the fifth and final HT.2 sub-phase. Two-track final sweep: Track 1 = HT.0.x finding spot-check (3 random findings) + drift-note inventory verification (14/14 closed); Track 2 = soak gate readiness readout publication. **Verdict: GREEN** — all 4 soak gate criteria empirically met. Substrate ready for next-track trajectory (H.9.x candidate).
+
+### What landed
+
+- **NEW `swarm/thoughts/shared/HT.2.5-soak-gate-readiness.md`** (~250 LoC) — substrate soak gate readiness readout documenting:
+  - All 4 criteria empirically met (5+ clean phases ✓; all drift-notes resolved ✓; test counts stable ✓; no outstanding HIGH FLAGs ✓)
+  - 6-phase count breakdown post-HT.1.13 (HT.1.14 + HT.1.15 + HT.2.1 + HT.2.2 + HT.2.3 + HT.2.4; HT.2.0 master-plan meta + HT.2.5 boundary excluded per architect MEDIUM-1 + code-reviewer LOW-2 convergent absorption at HT.2.0)
+  - 14-drift-note inventory closure table (8 RESOLVED by implementation + 6 codified as case studies)
+  - Test count trajectory across 7-phase soak period (monotonic non-decreasing)
+  - HIGH FLAG absorption summary (all single-pass)
+  - Final state snapshot + recommendation to proceed to H.9.x candidate
+
+- **Track 1 — 3 HT.0.x finding spot-checks** verified live against current substrate state:
+  - HT.0.1 A.1 settings-reader.js exports + cross-layer import → underlying issue CLOSED via HT.1.9 + HT.2.4
+  - HT.0.5a B.1 H.8.0 tier-aware structure → all 10 architecture KB docs still have `## Summary` + `## Quick Reference` — still empirically TRUE
+  - HT.0.8 Correctness.1 master plan checkbox state → all 4 HT.0.1-0.4 entries now `[x]` — RESOLVED
+  - 3/3 spot-checks confirm HT.0.x findings remain trustworthy
+
+- **Track 1 — 14-drift-note inventory verification**:
+  - 8 RESOLVED by implementation (66 at HT.1.6; 67 + 75 at HT.2.3; 68 + 69 at HT.2.4; 70 at HT.1.10; 73 at HT.2.2; 76 at HT.1.15)
+  - 6 codified as case studies at HT.2.1 measurement-methodology doc (63 + 64 + 65 + 71 + 72 + 74)
+  - 0 active drift-notes remain
+
+### Soak gate criteria — all 4 MET
+
+| Criterion | Status |
+|-----------|--------|
+| 1. 5+ consecutive clean phases since last institutional commitment (ADR-0005 at HT.1.13) | ✓ MET (6 phases) |
+| 2. All drift-notes resolved | ✓ MET (14/14) |
+| 3. Test counts stable | ✓ MET (monotonic non-decreasing; 75/75 + 63/63 + 16 baseline) |
+| 4. No outstanding HIGH-severity FLAGs | ✓ MET (0 outstanding; all absorbed single-pass) |
+
+### Empirical pre-validation pattern — 13-phase confirmed
+
+3 HT.0.x findings + 14-drift-note inventory verified live BEFORE sub-plan flipped draft → approved. Sibling-cohort with HT.1.8-1.15 + HT.2.1-2.4.
+
+### Forbidden-phrase grep gate
+
+Sub-plan: 1 match (`"always-on rules"` is compound noun referring to existing substrate feature naming — descriptive, not prescriptive). Soak gate readout: 0 matches clean first-pass.
+
+### Methodology
+
+Sub-plan-only per HT.2 master plan methodology table line 331 + HT.1.10/HT.1.12/HT.2.4 pure-doc/assessment-phase precedent. No per-phase pre-approval (assessment phase; no new architecture; no fresh design surface; no option-axis fork).
+
+### Verification
+
+- **install.sh smoke**: 75/75 (unchanged from HT.2.4)
+- **_h70-test.js asserts**: 63/63 (unchanged)
+- **contracts-validate.js violations**: 16 baseline only
+
+### Plugin manifest
+
+`1.12.1` UNCHANGED per pure-doc/assessment-phase convention (matches HT.1.10/HT.1.12/HT.1.14/HT.1.15/HT.2.1/HT.2.3/HT.2.4 precedent — assessment phase; no behavior change).
+
+### Wallclock
+
+~50 min end-to-end.
+
+### HT.2 cumulative reflections
+
+- **5 substantive sub-phases shipped** (HT.2.1-2.5) + HT.2.0 master plan = 6 phases total
+- **~8 hours wallclock cumulative** across HT.2 (HT.2.0 ~90 min + HT.2.1 ~135 min + HT.2.2 ~75 min + HT.2.3 ~120 min + HT.2.4 ~35 min + HT.2.5 ~50 min)
+- **Methodology distribution**: 3 per-phase pre-approval gates (HT.2.0 + HT.2.1 + HT.2.3) + 3 sub-plan-only (HT.2.2 + HT.2.4 + HT.2.5)
+- **Pre-approval dividend**: 36 FLAGs absorbed across HT.2.0 (11) + HT.2.1 (12) + HT.2.3 (13); 4 convergent; 2 INVALIDATED post-empirical-re-verify
+- **Plugin manifest progression**: 1.12.0 → 1.12.1 (only HT.2.2 patched; 5 of 6 sub-phases unchanged per pure-doc/pure-internal-refactor convention)
+
+### HT cumulative reflections (HT.0 + HT.1 + HT.2)
+
+- **HT.0** — 9 audit phases (hooks + scripts + commands + personas + KB/patterns + ADR + tests + cross-cutting + synthesis-to-backlog + HT.0.9-verify pre-approval gate)
+- **HT.1** — 15 refactor phases (HT.1.1-1.15; top-15 backlog cap closed)
+- **HT.2** — 5 sub-phases (doc-lag + measurement-methodology + parser-discipline-edge + hooks-discipline-edge + soak gate readiness)
+- **Substrate output**: 4 ADRs (ADR-0001 seed + ADR-0002 proposed + ADR-0003 accepted + ADR-0005 accepted) + 3 substrate convention docs in `swarm/` namespace + 3 lightweight BACKLOG decision-record-pattern entries
+- **ADR-system-bloat avoidance** validated empirically (would have been 6+ ADRs without HT.0.9-verify FLAG-5 right-sizing; substrate stays at 4 ADRs)
+- **Per-phase pre-approval gate institutional discipline** dogfooded across 7 invocations (HT.0.9-verify + HT.1.3 + HT.1.7 + HT.1.13 + HT.2.0 + HT.2.1 + HT.2.3); 100% single-pass absorption rate
+- **Empirical pre-validation pattern** 13-phase confirmed (HT.1.8-1.15 + HT.2.1-2.5); 100% green first-pass execution
+
+### Next
+
+**H.9.x candidate** — substrate ready for next-track trajectory transition. HT.3 NOT triggered (soak gate GREEN). Suggested H.9.x focus areas (informational, not binding): error-critic.js fail-soft contract upgrade (deferred from HT.2.3 per architect MEDIUM-A4); HT.0.5a Bar E forward-reference KB authoring (5 non-existent kb_id targets); Atomics.wait migration if profiling triggers (per HT.2.3 architect MEDIUM-A1 measurable trigger).
+
+---
+
 ## [unreleased] — 2026-05-10 — HT.2.4 doc-lag sweep (drift-notes 68 + 69 closed; fourth HT.2 sub-phase)
 
 **HT.2 fourth sub-phase. Sub-plan-only methodology per HT.2 master plan methodology table line 330** (mechanical doc-lag cleanup; no fresh design surface; no option-axis fork; no behavior change). Closes 2 doc-lag drift-notes captured at HT.1.9 implementation. **No plugin manifest bump** per pure-doc convention (matches HT.1.10/HT.1.12/HT.1.14/HT.1.15/HT.2.1/HT.2.3 precedents).
