@@ -2,7 +2,7 @@
 last_updated: 2026-05-10T21:00:00-07:00
 last_session_phase: HT.1.4 SHIPPED — install.sh run_smoke_tests 1188 LoC bash extraction (second ADR-0002 application; bash sourced-file post-split shape) on `ht/1.4-install-sh-run-smoke-tests`; per-phase pre-approval gate skipped per sub-plan-only methodology (mechanical extraction); drift-note 63 captured during execution (HT.0.9-verify FLAG-2 LoC correction was itself wrong; 537 → 1188 LoC); HT.1.5 next
 git_branch_at_last_save: ht/1.4-install-sh-run-smoke-tests
-git_commit_at_last_save: pending (this cutover commit will land HT.1.4)
+git_commit_at_last_save: 0e50a46
 ht_1_4_decision: Sub-plan-only — mechanical bash extraction; per-phase pre-approval skipped per documented methodology (ADR-0002 covers shape; phase-era boundaries mechanical; no test re-ordering; no test-grouping ambiguity). LoC discovery surfaced drift-note 63.
 ht_1_4_branch_target: ht/1.4-install-sh-run-smoke-tests (active branch)
 ht_1_3_decision: Option A — sub-plan + ADR-0002 + parallel architect+code-reviewer pre-approval + 5-module split (user-approved 2026-05-10; SHIPPED 2026-05-10)
