@@ -1,6 +1,12 @@
 ---
 adr_id: NNNN
 title: "Imperative-form short title (e.g., 'Adopt fail-open hook discipline')"
+# tier enum (3 values): technical | governance | editorial — per ADR-0004
+#   technical  — codifies MECHANICAL invariants verifiable by grep/lint/test
+#   governance — codifies INSTITUTIONAL commitments backed by load-bearing code-review gates
+#   editorial  — codifies AUTHORING discipline; LLM-side / author-side best-effort compliance
+# See swarm/adrs/0004-adr-tier-taxonomy.md for the canonical taxonomy + dominant-invariant disambiguation rule
+tier: technical
 # status enum (5 values): proposed | accepted | seed | superseded | deprecated
 #   proposed   — drafted; not yet in effect
 #   accepted   — approved; implementation can/has happened

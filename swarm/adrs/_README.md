@@ -32,6 +32,7 @@ Naming: `NNNN-imperative-short-title.md` where NNNN is zero-padded 4-digit ID, m
 ---
 adr_id: 0001                        # 4-digit ID; matches filename prefix
 title: "Short imperative title"
+tier: technical | governance | editorial   # per ADR-0004; see Tier taxonomy below
 status: proposed | accepted | seed | superseded | deprecated
 created: 2026-05-08
 author: 04-architect.theo           # persona/identity or human name
@@ -44,6 +45,26 @@ related_adrs: []
 related_kb: []
 ---
 ```
+
+## Tier taxonomy
+
+Per ADR-0004 (Codify ADR tier taxonomy at schema level), every substrate ADR declares a `tier` field with one of three values:
+
+| Tier | Codifies | Verification surface | Examples |
+|------|----------|----------------------|----------|
+| **technical** | MECHANICAL invariants | grep/lint/test (e.g., presence-of-pattern, `wc -l` thresholds, responsibility-counts) | ADR-0001 (fail-open hooks; 4 try/catch + logger + decision invariants); ADR-0002 (bridge-script entrypoint criterion; 800-LoC + 5-responsibility thresholds) |
+| **governance** | INSTITUTIONAL commitments | Human review of process discipline at PR time; mechanical augmentation possible but not load-bearing | ADR-0003 (institutional commitment to enforce ADR-0001 on all post-2026-05-10 hooks); ADR-0004 (institutional commitment that every ADR declares `tier`) |
+| **editorial** | AUTHORING discipline | Partition-decision review at PR time; LLM-side compliance is best-effort | ADR-0005 (slopfiles `<important if>` authoring discipline; predicate-vocabulary curation) |
+
+The three tiers compose: technical → governance → editorial. Each tier addresses a structurally distinct class of decision — WHAT the substrate enforces mechanically (technical), HOW the substrate maintains discipline institutionally (governance), and WHAT-CONTENT the substrate authors at the editorial layer (editorial).
+
+### Tier disambiguation (overlapping shapes)
+
+Some ADRs span tiers — e.g., one mechanical invariant + one governance invariant. The **dominant-invariant rule** resolves: classify by the invariant most load-bearing for the substrate's discipline. Cross-tier behavior should be acknowledged in the ADR body, but `tier` is single-valued.
+
+Example: ADR-0004 itself has a grep-verifiable invariant ("every ADR declares `tier` field"; mechanical-shape) but the load-bearing surface is the institutional commitment + code-review gate (governance-shape). Per dominant-invariant rule, `tier: governance` wins.
+
+When authoring a new ADR, ask: "Without code review enforcing this, would the invariant be effectively automated (technical), would the institutional commitment erode (governance), or would author judgment drift (editorial)?" The answer identifies the dominant tier.
 
 ## Lifecycle
 

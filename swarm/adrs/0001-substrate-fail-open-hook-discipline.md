@@ -1,6 +1,7 @@
 ---
 adr_id: 0001
 title: "Substrate hooks fail open with observability, never crash sessions"
+tier: technical
 status: seed
 created: 2026-05-08
 author: substrate (codified retrospectively in H.8.2; retagged seed at HT.1.7 per ADR system enum extension)

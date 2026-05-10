@@ -1,6 +1,7 @@
 ---
 adr_id: 0003
 title: "Substrate fail-open hook discipline as institutional commitment (governance-tier; forward-looking)"
+tier: governance
 status: accepted
 created: 2026-05-10
 author: root (HT.1.7 sub-plan; architect + code-reviewer per-phase pre-approval gate APPROVED-with-revisions; 7 FLAGs absorbed single-pass)

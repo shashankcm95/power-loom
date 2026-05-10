@@ -1,6 +1,7 @@
 ---
 adr_id: 0002
 title: "Bridge-script entrypoint criterion: when multi-responsibility-at-bridge-script accumulates vs when split applies"
+tier: technical
 status: proposed
 created: 2026-05-10
 author: root (HT.1.3 sub-plan; pending architect + code-reviewer per-phase pre-approval)

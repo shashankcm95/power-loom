@@ -1,6 +1,7 @@
 ---
 adr_id: 0005
 title: "Adopt slopfiles authoring discipline for always-on context surfaces"
+tier: editorial
 # status enum (5 values): proposed | accepted | seed | superseded | deprecated
 #   proposed   — drafted; not yet in effect
 #   accepted   — approved; implementation can/has happened

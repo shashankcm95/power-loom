@@ -8,6 +8,67 @@ For granular per-phase detail, see annotated tags `phase-H.x.y` and `swarm/H.x.y
 
 ---
 
+## [unreleased] — 2026-05-11 — HT.3.1 ADR tier taxonomy codification (post-HT audit-followup Tier 2; first of 3 sub-phases)
+
+**Post-HT audit-followup Tier 2 institutional reframing — first sub-phase.** HT.3.1 codifies the 3-tier ADR taxonomy (technical / governance / editorial) at schema level. The taxonomy has been operating in prose since HT.1.13 (ADR-0005 lines 60-66 declare it + map each existing ADR to a tier); HT.3.1 makes the mapping machine-readable via new frontmatter `tier` field + NEW ADR-0004 codifying the field requirement as governance-tier institutional commitment + retroactive tag on 4 existing ADRs (0001/0002 technical, 0003 governance, 0005 editorial). Sub-plan-only methodology per HT.1.7 ADR-system enum extension precedent (codification of pre-existing prose, not fresh institutional commitment).
+
+### Context — Tier 2 institutional reframing
+
+Post-HT audit-followup Tier 1 mechanical fixes shipped at `a00aeaa` on 2026-05-11 (H1 backslash-escape parser fix + H4 atomic-write DRY extraction + H5 dispatcher comment correction; Tier 1 CHANGELOG entry was missing — drift gap noted here, not separately filled per scope-bounding). 5-agent chaos test + HETS code review of HT.x cumulative state had surfaced two independent senior-architect FLAGs flagging "schema-vs-prose gap — 3-tier ADR taxonomy declared in ADR-0005 prose at HT.1.13 but no ADR frontmatter declares its tier." HT.3.1 closes the gap.
+
+### What landed
+
+- **NEW `swarm/adrs/0004-adr-tier-taxonomy.md`** (~180 LoC) — codifies the 3-tier ADR taxonomy as governance-tier institutional commitment. 4 invariants: (1) every ADR declares `tier` field with value technical | governance | editorial — PRs without `tier` are NEEDS-REVISION; (2) technical-tier codifies mechanical invariants verifiable by grep/lint/test; (3) governance-tier codifies institutional commitments + load-bearing code-review gates; (4) editorial-tier codifies authoring discipline with LLM-side / author-side best-effort compliance. Includes tier-disambiguation rule (dominant-invariant) + 4 alternatives considered + status notes.
+
+- **`swarm/adrs/_TEMPLATE.md` updated** — `tier:` field added to frontmatter with inline 3-value enum comment; positioned above `status:` (tier is more fundamental classifier than status).
+
+- **`swarm/adrs/_README.md` updated** — `tier` field added to frontmatter machine-readable-fields code block; NEW "Tier taxonomy" section between Lifecycle and CLI sections (~25 LoC) — summarizes 3 tiers + criteria + dominant-invariant disambiguation rule + cross-references ADR-0004.
+
+- **Retroactive tier tag on 4 existing ADRs**:
+  - `swarm/adrs/0001-substrate-fail-open-hook-discipline.md` → `tier: technical` (4 mechanical try/catch + logger + decision invariants; grep/test verifiable)
+  - `swarm/adrs/0002-bridge-script-entrypoint-criterion.md` → `tier: technical` (≤800 LoC + ≤5 responsibility-count thresholds; `wc -l` verifiable)
+  - `swarm/adrs/0003-substrate-fail-open-hook-discipline-forward-looking.md` → `tier: governance` (institutional commitment + load-bearing code-review gate)
+  - `swarm/adrs/0005-slopfiles-authoring-discipline.md` → `tier: editorial` (predicate-vocabulary curation + content-partition decisions; LLM-side compliance)
+
+### Empirical pre-validation pattern — 14-phase confirmed
+
+ADR-0005 lines 60-66 read live; each existing ADR's content reviewed against proposed tier classification before sub-plan flipped draft → approved. Sibling-cohort with HT.1.8-1.15 + HT.2.1-2.5.
+
+### Forbidden-phrase grep gate
+
+Sub-plan + ADR-0004 prose subjected to standard gate. ADR-0004 by nature uses prescriptive voice in Decision section (institutional-commitment-stating; comparable to ADR-0003's "MUST satisfy" + "MUST verify" prescriptive language) — this is the ADR-shape carve-out. Sub-plan Implementation strategy uses imperative voice ("Insert X", "Add Y") — plan-mode prescriptive carve-out (4th form per HT.2.5 sub-plan precedent). Both carve-outs documented in HT.2 master plan v3.1 line 165.
+
+### Methodology
+
+Sub-plan-only per HT.1.6 decision-rationale-matrix convention. 3 of 5 triggers absent (no fresh design surface — taxonomy in ADR-0005 prose; no option-axis decision — tier classifications unambiguous; no HIGH-class bug catchable at design — mechanical Edit operations). 2 present in codification-only form (schema change is additive; institutional discipline encoding is codification of EXISTING ADR-0005 prose discipline, not NEW commitment). Net: sub-plan-only with explicit decision-rationale matrix, matching HT.2.4 + HT.1.7 schema-extension precedents.
+
+### Verification
+
+- **install.sh smoke**: 75/75 (unchanged from HT.2.5; no behavior surface touched)
+- **_h70-test.js asserts**: 64/64 (unchanged from HT.audit-followup Tier 1; no test surface touched)
+- **contracts-validate.js violations**: 16 baseline only (no regression)
+- **ADR ledger**: 5 ADRs now (was 4); `node scripts/agent-team/adr.js list` surfaces all 5
+
+### Plugin manifest
+
+`1.12.2` → `1.12.3` (patch). Additive frontmatter field is schema-extension per HT.1.7 ADR-system enum extension precedent (HT.1.7 also bumped patch for schema-additive change).
+
+### Wallclock
+
+~50 min end-to-end (sub-plan + ADR-0004 authoring ~25 min + 5 file Edits ~15 min + manifest + SKILL + CHANGELOG + HT-state cutover ~10 min).
+
+### Pattern-level observations
+
+- **Schema-vs-prose codification pattern**: when institutional discipline operates in prose (e.g., ADR-0005 lines 60-66) without schema-layer machinery, retroactive codification is cheaper at small ledger size (4 ADRs in this case) than at large ledger size. HT.3.1 dogfoods this — codifying now while retroactive cost is bounded to 4 file edits.
+- **Dominant-invariant rule for cross-tier ADRs**: ADR-0004 itself has cross-tier shape (grep-verifiable invariant 1 — mechanical; load-bearing institutional commitment — governance). Rule resolves by classifying via most load-bearing invariant. Substrate's first explicit application of the rule; future cross-tier ADRs follow the same disambiguation.
+- **Post-HT Tier 2 institutional reframing**: HT.3 is the audit-followup-driven "after HT closure" track. Distinct from HT.3 candidates that might have triggered under YELLOW/RED soak gate. HT.3.1 + HT.3.2 + HT.3.3 are institutional reframing actions surfaced by external auditor (5-agent chaos test + HETS code review) post-HT closure, not new architectural phases.
+
+### Next
+
+**HT.3.2** — measurement-methodology.md reframe (strip imperative voice from 5 patterns OR re-cite as ADR-0004 editorial-tier framing). The audit surfaced that `swarm/measurement-methodology.md` declares itself "captures observed practice, not new institutional invariant" (line 25) but its 5 canonical patterns use imperative voice ("Never cite a raw grep count..."; "Name the measurement method..."; "Before 'delete + migrate' decisions, grep ALL invocation forms"). HT.3.2 closes the framing-vs-content gap. Sub-plan-only; mechanical prose surgery.
+
+---
+
 ## [unreleased] — 2026-05-11 — HT.2.5 final sweep + soak gate readiness readout (HT.2 CLOSED; verdict GREEN)
 
 **Hardening Track CLOSED.** HT.2.5 is the fifth and final HT.2 sub-phase. Two-track final sweep: Track 1 = HT.0.x finding spot-check (3 random findings) + drift-note inventory verification (14/14 closed); Track 2 = soak gate readiness readout publication. **Verdict: GREEN** — all 4 soak gate criteria empirically met. Substrate ready for next-track trajectory (H.9.x candidate).
