@@ -220,6 +220,32 @@ EOF
     failed=$((failed + 1))
   fi
 
+  # Test 77: HT.1.14 — bumpBatch in-process call (replaces 22-spawnSync worst-case)
+  # Validates programmatic surface: require('./scripts/self-improve-store').bumpBatch(signals)
+  # bumps turn counter + signals + returns expected shape. Uses ephemeral
+  # HOME so test doesn't touch user state. Pre-creates ~/.claude/ + checkpoints/
+  # so withLock can acquire its lock file (the directory must exist before
+  # `_lib/lock.js` attempts to write the lockfile).
+  echo -n "  Test 77 (HT.1.14 bumpBatch in-process call returns expected shape): "
+  T77_TMPDIR=$(mktemp -d)
+  mkdir -p "$T77_TMPDIR/.claude/checkpoints"
+  T77_OUT=$(HOME="$T77_TMPDIR" node -e "
+    const s = require('$SCRIPT_DIR/scripts/self-improve-store.js');
+    const r = s.bumpBatch(['filePath:/tmp/foo.js', 'command:/test']);
+    process.stdout.write(JSON.stringify(r));
+  " 2>/dev/null)
+  T77_TURN=$(echo "$T77_OUT" | python3 -c "import json,sys; print(json.load(sys.stdin).get('turnCounter', -1))" 2>/dev/null)
+  T77_BUMPED=$(echo "$T77_OUT" | python3 -c "import json,sys; print(json.load(sys.stdin).get('signalsBumped', -1))" 2>/dev/null)
+  T77_HAS_SHOULDSCAN=$(echo "$T77_OUT" | python3 -c "import json,sys; print('yes' if 'shouldScan' in json.load(sys.stdin) else 'no')" 2>/dev/null)
+  rm -rf "$T77_TMPDIR"
+  if [ "$T77_TURN" = "1" ] && [ "$T77_BUMPED" = "2" ] && [ "$T77_HAS_SHOULDSCAN" = "yes" ]; then
+    echo "OK (turnCounter=1, signalsBumped=2, shouldScan in result)"
+    passed=$((passed + 1))
+  else
+    echo "FAIL: turn=$T77_TURN, bumped=$T77_BUMPED, has_shouldScan=$T77_HAS_SHOULDSCAN"
+    failed=$((failed + 1))
+  fi
+
   # Test 65: H.8.7 — adr.js symlink defense (chaos M3)
   echo -n "  Test 65 (H.8.7 adr.js symlink defense; symlink in ADRS_DIR ignored): "
   T65_TMPDIR=$(mktemp -d)

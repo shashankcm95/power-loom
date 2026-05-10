@@ -8,6 +8,66 @@ For granular per-phase detail, see annotated tags `phase-H.x.y` and `swarm/H.x.y
 
 ---
 
+## [unreleased] — 2026-05-10 — HT.1.14 auto-store-enrichment.js subprocess density (batched into in-process call)
+
+**Hardening Track refactor 14 of N.** Replaces 22-spawnSync worst-case in `auto-store-enrichment.js` `bumpSelfImproveCounters` with single in-process `require(SELF_IMPROVE_SCRIPT).bumpBatch(signals)` call. Closes HT.0.1 D.1 most-weighty hooks-layer optimization finding. **No version bump** per pure-refactor convention (matches HT.1.2/HT.1.8/HT.1.9/HT.1.11 precedent).
+
+### Changed
+
+- **NEW programmatic surface in `scripts/self-improve-store.js`**: `bumpBatch(signals)` exported function batches turn counter + per-signal bumps + conditional scan in single Node module load (cached after first call). Single-lock acquisition for counter mutations (better atomicity than 22 separate lock acquisitions); conditional scan acquires its own nested-lock matching `cmdScan` pattern.
+- **`module.exports = { bumpBatch, cmdBump, cmdBumpTurn, cmdScan, cmdPending, cmdDismiss, cmdPromote, cmdReset, cmdStats }`** added (9 keys; previously no module.exports).
+- **CLI dispatch wrapped in `if (require.main === module)` guard** — `require('./scripts/self-improve-store.js')` does NOT trigger CLI switch dispatch on (always-undefined for require) `process.argv[2]`.
+- **`hooks/scripts/auto-store-enrichment.js` `bumpSelfImproveCounters` refactored**: 3 static spawnSync sites (line 243 bump-turn + line 250 loop body up to 20× signal bumps + line 256 conditional scan) → single in-process call. ADR-0001 fail-soft invariant 2 preserved via caller's try/catch + log-on-error + return null on failure.
+
+### Latency improvement
+
+- **Pre-HT.1.14**: 22 sequential spawnSync × ~50-100ms = 1.1-2.2 sec worst-case latency in user-perceptible Stop window
+- **Post-HT.1.14**: <50ms first call (module load) + <1ms subsequent (Node require cache hit). Effectively eliminates the latency.
+
+### Drift-note 75 NEW (captured at mid-implementation; lockfile-parent-dir surface)
+
+**Title**: `_lib/lock.js withLock` primitive fails opaquely with timeout-instead-of-ENOENT when lock-file parent directory doesn't exist.
+
+**Surfaced when**: HT.1.14 test 77 fixture used ephemeral HOME tmpdir without pre-creating `~/.claude/checkpoints/`. `withLock` attempted to acquire lock at `tmpdir/.claude/self-improve-counters.json.lock` but failed silently for 3 seconds before "Could not acquire lock... within 3000ms. Aborting." rather than emitting a clear ENOENT-style error.
+
+**Resolution**: HT.1.14 test 77 pre-creates `~/.claude/checkpoints/` in tmpdir before invoking `bumpBatch`. drift-note 75 deferred to HT.2 sweep — additive enhancement to `_lib/lock.js`: either `mkdirSync({recursive: true})` on lockfile parent before acquisition attempt, OR fail clearly with ENOENT detection rather than 3-second timeout.
+
+**Sibling cohort with drift-note 67** (session-end-nudge.js HOOK lock-primitive deferred) — both surface `_lib/lock.js` discipline-edge concerns. HT.2 sweep target.
+
+### Methodology
+
+**Sub-plan-only** per HT.1.4 + HT.1.6 + HT.1.8 + HT.1.9 + HT.1.10 + HT.1.11 + HT.1.12 sub-plan-only precedent (now 8 consecutive sub-plan-only phases since HT.1.7's per-phase pre-approval gate, with HT.1.13 as the exception which INVOKED gate per substantive design surface). Per-phase pre-approval gate skipped with EXPLICIT decision rationale matrix per HT.1.6 convention (no fresh design surface — batched-call shape mechanical; no schema change; no institutional discipline encoding; no HIGH-class bug catchable at design — ADR-0001 invariant 2 protects).
+
+**Empirical pre-validation pattern is now 7-phase confirmed** (HT.1.8 + HT.1.9 + HT.1.10 + HT.1.11 + HT.1.12 + HT.1.13 + HT.1.14): per-spawnSync-site-call-frequency inventory verified BEFORE sub-plan flips draft → approved.
+
+### Verification
+
+- **73/73 install.sh smoke** (+1 NEW HT.1.14 test 77 batch-call-shape validation)
+- **46/46 _h70-test.js asserts** (regression check; HT.1.14 doesn't touch agent-identity / its sub-modules)
+- **0 contracts-validate violations** excluding pre-existing 16 baseline
+- **CLI surface preserved**: `node scripts/self-improve-store.js bump-turn` exits 0 with expected JSON
+- **Programmatic surface verified**: `node -e "Object.keys(require('./scripts/self-improve-store.js'))"` returns 9 keys including `bumpBatch`
+
+### Why this matters
+
+- **Closes HT.0.1 D.1 most-weighty hooks-layer optimization finding** — 1.1-2.2 sec worst-case latency reduced to <50ms (single in-process call)
+- **Captures drift-note 75** (lockfile-parent-dir discipline-edge; sibling cohort with drift-note 67)
+- **Empirical pre-validation pattern is now 7-phase confirmed** (HT.1.8-1.14)
+- **CLI surface preserved by design** — `require.main === module` guard
+- **Fifty-fifth distinct phase shape**: hooks-layer subprocess-batch optimization via in-process require + programmatic-surface addition
+
+### Plugin manifest
+
+`1.12.0` unchanged (no version bump per pure-refactor convention; matches HT.1.2/HT.1.8/HT.1.9/HT.1.11 precedents — substrate-internal optimization; no consumer-visible behavior change).
+
+### Out of scope (deferred)
+
+- **Extract shared `_scanInternal()` helper** from `cmdScan` to share scan logic with `bumpBatch` (currently scan body is duplicated; HT.2 sweep candidate to extract shared internal helper)
+- **`_lib/lock.js` lockfile-parent-dir resilience** (drift-note 75; HT.2 sweep candidate)
+- **Direct unit tests for `bumpBatch`** (deferred; install.sh integration test 77 covers behavior preservation)
+
+---
+
 ## [1.12.0] — 2026-05-10 — HT.1.13 Slopfiles authoring discipline + ADR-0005 + rules/core refactor
 
 **Hardening Track refactor 13 of N.** Adopts `<important if "task involves X">...</important>` block-marker convention for always-on context surfaces (`rules/core/*.md`); authors ADR-0005 codifying slopfiles authoring discipline as substrate primitive (THIRD load-bearing ADR after ADR-0002 + ADR-0003). Closes HT.0.8 Size.3 most-weighty cross-cutting finding (always-on rules tax). Plugin manifest `1.11.3 → 1.12.0` (minor — additive substrate primitive + 2 NEW substrate-meta architecture docs).

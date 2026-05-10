@@ -283,6 +283,106 @@ function cmdScan() {
   console.log(JSON.stringify(result));
 }
 
+// HT.1.14: Batched in-process call. Replaces 22-spawnSync worst-case from
+// auto-store-enrichment.js bumpSelfImproveCounters (1 bump-turn + up to 20
+// bump-signal + 1 conditional scan). Single Node module-load instead of 22
+// subprocess spawns. ADR-0001 fail-soft invariant 2 preserved by caller's
+// try/catch + log-on-error; this function does NOT swallow errors itself.
+//
+// Single withLock for counter mutations (better atomicity than 22 separate
+// lock acquisitions). Conditional scan acquires its own nested-lock as in
+// cmdScan (preserves the same lock-acquisition order: COUNTERS_PATH first,
+// PENDING_PATH nested).
+//
+// @param {string[]} signals - array of signals (each "type:value" form); up to 20 processed
+// @returns {{shouldScan: boolean, signalsBumped: number, scanResult: object|null, turnCounter: number}}
+function bumpBatch(signals) {
+  let shouldScan = false;
+  let signalsBumped = 0;
+  let scanResult = null;
+  let turnCounter = 0;
+  const sigs = Array.isArray(signals) ? signals.slice(0, 20) : [];
+
+  // Bump turn counter + each signal in a single lock acquisition.
+  withLock(COUNTERS_PATH + '.lock', () => {
+    const counters = loadCounters();
+    const now = new Date().toISOString();
+
+    counters.turnCounter += 1;
+    turnCounter = counters.turnCounter;
+    if (counters.turnCounter - counters.lastScanTurn >= SCAN_TURN_INTERVAL) {
+      shouldScan = true;
+    }
+
+    for (const signal of sigs) {
+      const entry = counters.signals[signal] || { count: 0, firstSeen: now, lastSeen: now };
+      entry.count += 1;
+      entry.lastSeen = now;
+      counters.signals[signal] = entry;
+      signalsBumped++;
+    }
+
+    writeAtomic(COUNTERS_PATH, counters);
+  });
+
+  // Conditional scan — separate lock acquisition matches cmdScan's nested
+  // withLock pattern. Scan body duplicated from cmdScan with the
+  // console.log(...) emission removed (in-process callers want the result
+  // object, not stdout). Extraction of shared internal helper deferred to
+  // HT.2 sweep candidate to keep HT.1.14 scope mechanical.
+  if (shouldScan) {
+    let result;
+    withLock(COUNTERS_PATH + '.lock', () => {
+      withLock(PENDING_PATH + '.lock', () => {
+        const counters = loadCounters();
+        const pending = loadPending();
+        const knownSignatures = new Set(pending.candidates.map((c) => c.signal));
+        const newCandidates = [];
+        const autoGraduated = [];
+        for (const [signal, entry] of Object.entries(counters.signals)) {
+          if (knownSignatures.has(signal)) continue;
+          if (entry.count < THRESHOLDS.candidate) continue;
+          const kind = inferKindFromSignal(signal);
+          const risk = KIND_RISK[kind] || 'medium';
+          const candidate = {
+            id: newCandidateId(),
+            kind,
+            signal,
+            occurrences: entry.count,
+            firstSeen: entry.firstSeen,
+            lastSeen: entry.lastSeen,
+            risk,
+            summary: signalToSummary(signal, entry),
+            proposedAction: signalToProposedAction(signal, kind),
+            status: 'pending',
+            createdAt: new Date().toISOString(),
+          };
+          if (risk === 'low' && entry.count >= THRESHOLDS.autoGraduate) {
+            candidate.status = 'auto-graduated';
+            executeGraduation(candidate);
+            autoGraduated.push(candidate);
+          } else {
+            newCandidates.push(candidate);
+          }
+        }
+        pending.candidates.push(...newCandidates, ...autoGraduated);
+        counters.lastScanAt = new Date().toISOString();
+        counters.lastScanTurn = counters.turnCounter;
+        writeAtomic(COUNTERS_PATH, counters);
+        writeAtomic(PENDING_PATH, pending);
+        result = {
+          newCandidates: newCandidates.length,
+          autoGraduated: autoGraduated.length,
+          totalPending: pending.candidates.filter((c) => c.status === 'pending').length,
+        };
+      });
+    });
+    scanResult = result;
+  }
+
+  return { shouldScan, signalsBumped, scanResult, turnCounter };
+}
+
 // H.5.3 (CS-3 hacker.kai H-2): executeGraduation appends to a shared log.
 // Lines longer than PIPE_BUF (512 bytes on Darwin, 4096 on Linux) lose append
 // atomicity → concurrent writers can interleave bytes mid-line → audit log
@@ -405,27 +505,46 @@ function cmdStats() {
   }, null, 2));
 }
 
-const cmd = process.argv[2];
-const args = parseArgs(process.argv.slice(3));
+// HT.1.14: programmatic surface for in-process callers (auto-store-enrichment.js
+// bumpSelfImproveCounters now requires this module instead of spawning subprocess).
+// CLI dispatch wrapped in `require.main === module` guard so requiring the
+// module does not trigger the switch dispatch on the (always-undefined for
+// require()) `process.argv[2]`.
+module.exports = {
+  bumpBatch,
+  cmdBump,
+  cmdBumpTurn,
+  cmdScan,
+  cmdPending,
+  cmdDismiss,
+  cmdPromote,
+  cmdReset,
+  cmdStats,
+};
 
-switch (cmd) {
-  case 'bump':       cmdBump(args); break;
-  case 'bump-turn':  cmdBumpTurn(); break;
-  case 'scan':       cmdScan(args); break;
-  case 'pending':    cmdPending(args); break;
-  case 'dismiss':    cmdDismiss(args); break;
-  case 'promote':    cmdPromote(args); break;
-  case 'reset':      cmdReset(); break;
-  case 'stats':      cmdStats(); break;
-  default:
-    console.error('Usage: self-improve-store.js {bump|bump-turn|scan|pending|dismiss|promote|reset|stats} [args]');
-    console.error('  bump --signal <type:value> [--n N]    — increment counter');
-    console.error('  bump-turn                             — increment turn counter; reports shouldScan');
-    console.error('  scan                                   — consolidate counters → pending queue');
-    console.error('  pending [--json]                      — list pending + auto-graduated candidates');
-    console.error('  dismiss --id <id>                      — mark dismissed');
-    console.error('  promote --id <id>                      — execute (low-risk only)');
-    console.error('  reset                                   — wipe state (test fixture)');
-    console.error('  stats                                   — counter + queue summary');
-    process.exit(1);
+if (require.main === module) {
+  const cmd = process.argv[2];
+  const args = parseArgs(process.argv.slice(3));
+
+  switch (cmd) {
+    case 'bump':       cmdBump(args); break;
+    case 'bump-turn':  cmdBumpTurn(); break;
+    case 'scan':       cmdScan(args); break;
+    case 'pending':    cmdPending(args); break;
+    case 'dismiss':    cmdDismiss(args); break;
+    case 'promote':    cmdPromote(args); break;
+    case 'reset':      cmdReset(); break;
+    case 'stats':      cmdStats(); break;
+    default:
+      console.error('Usage: self-improve-store.js {bump|bump-turn|scan|pending|dismiss|promote|reset|stats} [args]');
+      console.error('  bump --signal <type:value> [--n N]    — increment counter');
+      console.error('  bump-turn                             — increment turn counter; reports shouldScan');
+      console.error('  scan                                   — consolidate counters → pending queue');
+      console.error('  pending [--json]                      — list pending + auto-graduated candidates');
+      console.error('  dismiss --id <id>                      — mark dismissed');
+      console.error('  promote --id <id>                      — execute (low-risk only)');
+      console.error('  reset                                   — wipe state (test fixture)');
+      console.error('  stats                                   — counter + queue summary');
+      process.exit(1);
+  }
 }

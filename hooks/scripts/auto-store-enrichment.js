@@ -235,33 +235,22 @@ function extractSignals(text) {
 
 function bumpSelfImproveCounters(signals) {
   if (!SELF_IMPROVE_SCRIPT) return null;
-  // bump turn counter + each detected signal. spawnSync per call is fine —
-  // the store does atomic writes and the volume is low (1 turn + ≤20 unique
-  // signals per Stop event). 8s timeout matches storePattern.
-  const results = { shouldScan: false, signalsBumped: 0 };
+  // HT.1.14: batched in-process call. Was 3 static spawnSync sites worst-case
+  // 22 calls × ~50-100ms = 1.1-2.2 sec latency in user-perceptible Stop window.
+  // Now: single Node module load (cached after first call) + single in-process
+  // call with all signals batched. ~50ms once + ~1ms per subsequent Stop.
+  //
+  // ADR-0001 fail-soft invariant 2 preserved: try/catch + log on error +
+  // return null on failure (caller treats null as "skip self-improve this turn"
+  // and continues; hook input pass-through happens at line 272 unconditionally).
   try {
-    const turnRes = spawnSync(process.execPath, [SELF_IMPROVE_SCRIPT, 'bump-turn'], {
-      encoding: 'utf8', timeout: 8000, stdio: ['pipe', 'pipe', 'pipe'],
-    });
-    if (turnRes.status === 0) {
-      try { results.shouldScan = JSON.parse(turnRes.stdout).shouldScan === true; } catch {}
-    }
-    for (const sig of signals.slice(0, 20)) {
-      const r = spawnSync(process.execPath, [SELF_IMPROVE_SCRIPT, 'bump', '--signal', sig], {
-        encoding: 'utf8', timeout: 4000, stdio: ['pipe', 'pipe', 'pipe'],
-      });
-      if (r.status === 0) results.signalsBumped++;
-    }
-    if (results.shouldScan) {
-      spawnSync(process.execPath, [SELF_IMPROVE_SCRIPT, 'scan'], {
-        encoding: 'utf8', timeout: 8000, stdio: ['pipe', 'pipe', 'pipe'],
-      });
-    }
+    const store = require(SELF_IMPROVE_SCRIPT);
+    const result = store.bumpBatch(signals);
+    return { shouldScan: result.shouldScan, signalsBumped: result.signalsBumped };
   } catch (err) {
     log('self_improve_failed', { error: err.message });
     return null;
   }
-  return results;
 }
 
 let input = '';
