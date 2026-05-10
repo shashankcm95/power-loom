@@ -4,11 +4,12 @@
 # $passed and $failed counters via bash lexical-scope inheritance.
 #
 # Per HT.1.4 (ADR-0002 cross-language application — bash sourced-file
-# post-split shape). Test count: 3 (tests 69-70 — HT.1.1 noCritiqueLanguage;
-# test 65 — H.8.7 adr.js symlink defense, intentional trailer position per
-# HT.0.7 audit anomaly preservation).
+# post-split shape). Test count: 4 (tests 69-70 — HT.1.1 noCritiqueLanguage;
+# test 71 — HT.1.5 build-team-helpers.sh dispatch; test 65 — H.8.7 adr.js
+# symlink defense, intentional trailer position per HT.0.7 audit anomaly
+# preservation).
 #
-# Source order: tests 69, 70 first (HT.1.1 phase tests in numeric order),
+# Source order: tests 69, 70, 71 first (HT.1.x phase tests in numeric order),
 # then test 65 (H.8.7 trailer) last — preserves the original execution
 # order of run_smoke_tests pre-extraction.
 #
@@ -83,6 +84,42 @@ EOF
     failed=$((failed + 1))
   fi
   rm -rf "$T70_TMPDIR"
+
+  # Test 71: HT.1.5 — build-team-helpers.sh dispatch smoke (helper script syntax + 5+1 subcommand
+  # surface integrity). Exercises --help (exits 0; lists subcommands) and unknown-subcommand
+  # error path (exits 1; emits usage to stderr). Per HT.1.5 sub-plan probe #4.
+  echo -n "  Test 71 (HT.1.5 build-team-helpers.sh dispatch + subcommand surface): "
+  T71_HELPER="$SCRIPT_DIR/scripts/agent-team/build-team-helpers.sh"
+  if [ ! -f "$T71_HELPER" ]; then
+    echo "FAIL: helper script missing at $T71_HELPER"
+    failed=$((failed + 1))
+  else
+    # --help (exits 0): direct capture is set-e-safe
+    T71_HELP_OUT=$(bash "$T71_HELPER" --help 2>/dev/null)
+    T71_HELP_EXIT=$?
+    # Unknown subcommand (exits 1): wrap in if-form to bypass install.sh's `set -e`
+    if T71_UNKNOWN_OUT=$(bash "$T71_HELPER" __nonexistent_subcommand__ 2>&1 >/dev/null); then
+      T71_UNKNOWN_EXIT=0
+    else
+      T71_UNKNOWN_EXIT=$?
+    fi
+    if [ "$T71_HELP_EXIT" = "0" ] \
+        && echo "$T71_HELP_OUT" | grep -q "Subcommands:" \
+        && echo "$T71_HELP_OUT" | grep -q "route-decide-gate" \
+        && echo "$T71_HELP_OUT" | grep -q "build-spawn-context" \
+        && echo "$T71_HELP_OUT" | grep -q "verify-with-contract-selection" \
+        && echo "$T71_HELP_OUT" | grep -q "assign-challenger-pair" \
+        && echo "$T71_HELP_OUT" | grep -q "record-verdict" \
+        && [ "$T71_UNKNOWN_EXIT" = "1" ] \
+        && echo "$T71_UNKNOWN_OUT" | grep -q "Unknown subcommand"; then
+      echo "OK (--help exits 0 with 5 subcommands; unknown subcommand exits 1)"
+      passed=$((passed + 1))
+    else
+      echo "FAIL: help_exit=$T71_HELP_EXIT unknown_exit=$T71_UNKNOWN_EXIT (want help_exit=0 + 5 subcommands listed + unknown_exit=1)"
+      failed=$((failed + 1))
+    fi
+  fi
+
   # Test 65: H.8.7 — adr.js symlink defense (chaos M3)
   echo -n "  Test 65 (H.8.7 adr.js symlink defense; symlink in ADRS_DIR ignored): "
   T65_TMPDIR=$(mktemp -d)

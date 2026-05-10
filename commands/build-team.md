@@ -14,6 +14,8 @@ Examples:
 
 If `$ARGUMENTS` is empty, ask one clarifying question (intent + domain) and stop.
 
+Substrate-primitive bash invocations for Steps 0, 1.5, and 2 are wrapped by [`scripts/agent-team/build-team-helpers.sh`](../scripts/agent-team/build-team-helpers.sh) (HT.1.5 ship; third ADR-0002 application — markdown narrative + helper-script invocations post-split shape). Run `bash $HOME/Documents/claude-toolkit/scripts/agent-team/build-team-helpers.sh --help` for the 5-subcommand surface. Chat-agent actions (`spawn_implementer`, `spawn_challenger`) remain inline as Agent-tool placeholders per `kb:hets/spawn-conventions` and `kb:hets/challenger-conventions`.
+
 ## Steps
 
 ### 0. Route-decision gate (H.7.3 + H.7.5 context-aware)
@@ -22,91 +24,28 @@ Before invoking tech-stack-analyzer (which is itself ~3K tokens for the analysis
 
 If `$ARGUMENTS` contains the literal flag `--force-route`, skip Step 0 entirely and proceed to Step 1.
 
-**H.7.5 — context-aware**: when invoking on a conversation continuation (the user is mid-thread, e.g., approving a recommendation from the prior turn), ALWAYS pass `--context "<last assistant excerpt>"`. The bare task often strips the routing signal that lived in the prior recommendation — context restores it. Bound to last 1-3 turns; cap at ~8K chars. The chat agent reading this command extracts the prior assistant excerpt itself (it's in Claude's context window already; no transcript Read needed at this layer).
+**H.7.5 — context-aware**: when invoking on a conversation continuation (the user is mid-thread, e.g., approving a recommendation from the prior turn), ALWAYS pass the prior assistant excerpt as the second arg. The bare task often strips the routing signal that lived in the prior recommendation — context restores it. Bound to last 1-3 turns; cap at ~8K chars. The chat agent reading this command extracts the prior assistant excerpt itself (it's in Claude's context window already; no transcript Read needed at this layer).
 
 ```bash
-# H.7.3 + H.7.5 — Route-decision gate. Pure-function score on 7 weighted dimensions
-# plus optional --context for conversation-continuation routing signal.
-# Defaults to "route" (fail-open) if the script is missing.
-
-ROUTE_DECIDE_SCRIPT="$HOME/Documents/claude-toolkit/scripts/agent-team/route-decide.js"
-
-# H.7.5 — context excerpt from prior assistant turn (root extracts before invoking).
-# Empty string when there's no prior turn (first-turn invocation) or when the
-# task itself carries the full routing signal.
+# H.7.3 + H.7.5 — Route-decision gate via build-team-helpers.sh wrapper.
+# Helper handles fail-open (ROUTE_DECIDE_SCRIPT missing → defaults to route).
+# PRIOR_TURN_EXCERPT empty on first-turn invocation; chat agent populates from
+# Claude's context window for conversation-continuation routing signal.
 PRIOR_TURN_EXCERPT="${PRIOR_TURN_EXCERPT:-}"
-
-if [ ! -f "$ROUTE_DECIDE_SCRIPT" ]; then
-  echo "WARNING: route-decide.js not present at $ROUTE_DECIDE_SCRIPT; defaulting to route (fail-open to pre-H.7.3 behavior)"
-  ROUTE_DECISION="route"
-else
-  if [ -n "$PRIOR_TURN_EXCERPT" ]; then
-    ROUTE_OUTPUT=$(node "$ROUTE_DECIDE_SCRIPT" --task "$TASK_DESCRIPTION" --context "$PRIOR_TURN_EXCERPT")
-  else
-    ROUTE_OUTPUT=$(node "$ROUTE_DECIDE_SCRIPT" --task "$TASK_DESCRIPTION")
-  fi
-  ROUTE_DECISION=$(echo "$ROUTE_OUTPUT" | jq -r '.recommendation')
-  ROUTE_SCORE=$(echo "$ROUTE_OUTPUT" | jq -r '.score_total')
-  ROUTE_REASONING=$(echo "$ROUTE_OUTPUT" | jq -r '.reasoning')
-  ROUTE_UNCERTAIN=$(echo "$ROUTE_OUTPUT" | jq -r '.uncertain // false')
-fi
-
-# H.7.5 — handle ROUTE-DECISION-UNCERTAIN forcing instruction BEFORE the case dispatch.
-# Triggered when score≤0.05 AND no --context was supplied AND wordCount≥4.
-# Don't silently default to root — re-invoke with context, or surface to user.
-if [ "$ROUTE_UNCERTAIN" = "true" ]; then
-  echo ""
-  echo "Route-decision: UNCERTAIN (score=$ROUTE_SCORE; no context provided; bare prompt has near-zero keyword signal)"
-  echo "Reasoning: $ROUTE_REASONING"
-  echo ""
-  echo "The keyword heuristic abstained on this task. Before defaulting to root, consider:"
-  echo "  - Does the prior assistant turn mention a concrete plan/recommendation?"
-  echo "  - Is this prompt a follow-up that strips routing context (e.g., 'go on', 'do that')?"
-  echo "  - Re-invoke with PRIOR_TURN_EXCERPT set to the last assistant excerpt"
-  echo "  - Or use --force-route / --force-root for explicit override"
-  exit 0  # model waits for user disambiguation, not literal shell exit
-fi
-
-case "$ROUTE_DECISION" in
-  route)
-    # Continue to Step 1 (tech-stack-analyzer). No user gate here — the existing
-    # Step 5 USER GATE 1 is where the team plan gets reviewed.
-    echo "Route-decision: route (score=$ROUTE_SCORE) — proceeding to tech-stack-analyzer"
-    ;;
-
-  borderline)
-    # Surface decomposition to user; let them pick. The borderline band is exactly
-    # the cost-benefit-ambiguous case — root has no information advantage here.
-    echo ""
-    echo "Route-decision: BORDERLINE (score=$ROUTE_SCORE)"
-    echo "Reasoning: $ROUTE_REASONING"
-    echo ""
-    echo "This task is in the borderline band — HETS routing is cost-justified about"
-    echo "half the time. Pick one:"
-    echo "  [1] Route through HETS (full team spawn, ~30K-100K tokens)"
-    echo "  [2] Hand back to root (~3K tokens, no convergence signal)"
-    echo "  [3] Cancel"
-    # Implementer note: shell-driven prompts in /build-team are model-followed,
-    # not literally interactive. The chat agent reading this command emits the
-    # decomposition + the three-option menu and waits for the user's reply.
-    exit 0  # actual flow is the model waiting for user reply, not a literal shell exit
-    ;;
-
-  root)
-    # Hand back to root with skip-orchestration message. No team spawn.
-    echo ""
-    echo "Route-decision: ROOT (score=$ROUTE_SCORE)"
-    echo "Reasoning: $ROUTE_REASONING"
-    echo ""
-    echo "This task does not benefit from HETS routing. Root will handle it directly."
-    echo "If you disagree (e.g., the task has hidden complexity not captured by keywords),"
-    echo "re-invoke /build-team with --force-route or describe the constraints more explicitly."
-    exit 0
-    ;;
-esac
+ROUTE_OUTPUT=$(bash $HOME/Documents/claude-toolkit/scripts/agent-team/build-team-helpers.sh \
+  route-decide-gate "$TASK_DESCRIPTION" "$PRIOR_TURN_EXCERPT")
+ROUTE_DECISION=$(echo "$ROUTE_OUTPUT" | jq -r '.recommendation')
+ROUTE_SCORE=$(echo "$ROUTE_OUTPUT" | jq -r '.score_total')
+ROUTE_REASONING=$(echo "$ROUTE_OUTPUT" | jq -r '.reasoning')
+ROUTE_UNCERTAIN=$(echo "$ROUTE_OUTPUT" | jq -r '.uncertain // false')
 ```
 
-The chat agent (Claude reading `/build-team`) follows this flow on every invocation. The route-decision is a pre-flight check that runs BEFORE Step 1 (tech-stack-analyzer). If `--force-route` is passed by the user as an explicit override, skip this Step 0 entirely and proceed to Step 1. If the gate emits `UNCERTAIN` (H.7.5 forcing instruction fired), do NOT silently default to root — re-invoke with prior-turn context or surface to user for explicit disambiguation.
+Then dispatch on `$ROUTE_DECISION` (chat-agent followed; emit user-facing messages and wait for reply where applicable):
+
+- **`route`** — proceed to Step 1 (tech-stack-analyzer). No user gate here; the existing Step 5 USER GATE 1 is where the team plan gets reviewed.
+- **`borderline`** — surface the score + reasoning to the user with a 3-option menu (route / root / cancel) and wait for reply. The borderline band is the cost-benefit-ambiguous case — root has no information advantage here.
+- **`root`** — hand back to root with skip-orchestration message; no team spawn. If user disagrees, they re-invoke with `--force-route` or describe constraints more explicitly.
+- **`uncertain` (H.7.5 forcing instruction)** — fired when score≤0.05 AND no `--context` was supplied AND wordCount≥4. Do NOT silently default to root. Either re-invoke with `PRIOR_TURN_EXCERPT` set, or surface to user for explicit `--force-route` / `--force-root` disambiguation.
 
 ### 1. Pre-flight check
 Verify the HETS substrate is ready:
@@ -121,24 +60,13 @@ If any of these fail, surface the issue and STOP. Don't try to build a team on b
 
 ### 1.5. Pre-spawn context auto-extension (H.8.5 — wires H.8.3)
 
-Before invoking tech-stack-analyzer (Step 2), build the team-wide spawn-context block via `build-spawn-context.js`. This composes the H.8.x trilogy primitives (architecture-relevance-detector + adr.js touched-by + kb-resolver tier-aware loading) into a structured context block that ALL spawned identities receive as a prefix to their individual persona/task instructions. Substrate-curated kb anchoring + drift-aware ADR injection becomes automatic per spawn.
+Before invoking tech-stack-analyzer (Step 2), build the team-wide spawn-context block via the helper's `build-spawn-context` subcommand. This composes the H.8.x trilogy primitives (architecture-relevance-detector + adr.js touched-by + kb-resolver tier-aware loading) into a structured context block that ALL spawned identities receive as a prefix to their individual persona/task instructions. Substrate-curated kb anchoring + drift-aware ADR injection becomes automatic per spawn.
 
 ```bash
 # Optional --files arg if user provides specific paths in $ARGUMENTS;
 # otherwise just task-shaped detection (no ADR matching this run).
-FILES_ARG=""
-if [ -n "${TARGET_FILES:-}" ]; then
-  FILES_ARG="--files \"$TARGET_FILES\""
-fi
-
-# Invoke build-spawn-context. Per ADR-0001, this is fail-open: if the helper
-# errors, SPAWN_CONTEXT becomes empty string and Step 2 proceeds without
-# substrate-curated anchoring (the team still spawns; it just doesn't get
-# the auto-extension prefix).
-SPAWN_CONTEXT=$(node ~/Documents/claude-toolkit/scripts/agent-team/build-spawn-context.js \
-  --task "$TASK_DESCRIPTION" \
-  $FILES_ARG \
-  --format text 2>/dev/null || echo "")
+SPAWN_CONTEXT=$(bash $HOME/Documents/claude-toolkit/scripts/agent-team/build-team-helpers.sh \
+  build-spawn-context "$TASK_DESCRIPTION" "${TARGET_FILES:-}")
 
 if [ -n "$SPAWN_CONTEXT" ]; then
   echo "Spawn context auto-extension: $(echo "$SPAWN_CONTEXT" | wc -l) lines of substrate-curated KB+ADR anchoring will prefix each spawn"
@@ -162,111 +90,68 @@ Follow the 7-step workflow in `skills/tech-stack-analyzer/SKILL.md`:
   For each identity in the planned team:
 
   ```bash
-  # 1. Get verification recommendation
+  HELPER="$HOME/Documents/claude-toolkit/scripts/agent-team/build-team-helpers.sh"
+
+  # 1. Get verification recommendation (kept inline — pure pass-through)
   REC=$(node ~/Documents/claude-toolkit/scripts/agent-team/agent-identity.js \
     recommend-verification --identity "$IDENTITY")
   VERIFICATION=$(echo "$REC" | jq -r '.verification')
   CHALLENGER_COUNT=$(echo "$REC" | jq -r '.challengerCount')
-  TIER=$(echo "$REC" | jq -r '.tier')
 
-  # 2. Spawn implementer (always, regardless of tier)
-  # H.8.5: $SPAWN_CONTEXT (computed in Step 1.5) is prepended to the spawn prompt
-  # so each implementer gets substrate-curated KB anchoring + active-ADR awareness
-  # before its persona/task block. spawn_implementer's prompt construction follows
-  # the kb:hets/spawn-conventions extended for this prefix.
-  spawn_implementer "$IDENTITY" "$TASK" "$SPAWN_CONTEXT"   # follows kb:hets/spawn-conventions
+  # 2. Spawn implementer (always, regardless of tier) — chat-agent action; not bash.
+  # H.8.5: $SPAWN_CONTEXT (Step 1.5) is prepended to the spawn prompt so each
+  # implementer gets substrate-curated KB anchoring + active-ADR awareness before
+  # its persona/task block. Follows kb:hets/spawn-conventions extended for the prefix.
+  spawn_implementer "$IDENTITY" "$TASK" "$SPAWN_CONTEXT"
 
-  # H.5.7 — task-type heuristic for contract selection.
-  # Honors --task-type explicit override if root provides ($TASK_TYPE_OVERRIDE);
-  # otherwise heuristic-by-verbs. Audit-precedence by design: mixed-mode tasks
-  # ("audit and fix the OAuth flow") default to audit unless override forces
-  # engineering. Engineering is the fallback default — its 1+1 thresholds make it
-  # permissive, so a misclassified-as-engineering audit task still passes (no
-  # regression). A misclassified-as-audit engineering task fails the audit
-  # contract on minFindings/citations padding — which IS the H.5.7 problem this
-  # heuristic exists to solve.
-  TASK_TYPE_OVERRIDE=""  # Root sets to "audit" or "engineering" if explicit; else heuristic fires.
+  # 3. Branch on verification policy. The verify-with-contract-selection helper
+  # applies H.5.7 task-type heuristic + contract selection internally; tier-aware
+  # skip-checks logic also internal. TASK_TYPE_OVERRIDE optional ("audit" /
+  # "engineering" / empty for heuristic).
+  PERSONA="${IDENTITY%%.*}"
+  TASK_TYPE_OVERRIDE=""
 
-  if [ -n "$TASK_TYPE_OVERRIDE" ]; then
-    TASK_TYPE="$TASK_TYPE_OVERRIDE"
-  elif echo "$TASK_DESCRIPTION" | grep -iE "audit|review|assess|analyze|investigate|check|verify|inspect|examine|find vulnerabilities" > /dev/null; then
-    TASK_TYPE="audit"
-  else
-    TASK_TYPE="engineering"  # fallback default — permissive contract has no regression risk
-  fi
-
-  if [ "$TASK_TYPE" = "audit" ]; then
-    IMPL_CONTRACT="swarm/personas-contracts/${PERSONA}.contract.json"  # use persona's audit-shaped contract
-  else
-    IMPL_CONTRACT="swarm/personas-contracts/engineering-task.contract.json"  # H.5.7 generic engineering contract
-  fi
-
-  echo "H.5.7 selected: TASK_TYPE=$TASK_TYPE, CONTRACT=$IMPL_CONTRACT"
-
-  # 3. Branch on verification policy.
-  #    SKIP_CHECKS is read ONLY in the high-trust branch (H-2 of the H.7.1 design):
-  #    medium/low must run full verification.
   case "$VERIFICATION" in
     spot-check-only)
-      # high-trust — verify with skipped expensive checks (only branch that
-      # consumes recommend-verification.skipChecks; do NOT forward this flag
-      # in the medium/low branches).
+      # high-trust — verifier consumes recommend-verification.skipChecks (only
+      # this branch reads SKIP_CHECKS; H.7.1 H-2 forbids it in medium/low).
       SKIP_CHECKS=$(echo "$REC" | jq -r '.skipChecks | join(",")')
-      node ~/Documents/claude-toolkit/scripts/agent-team/contract-verifier.js \
-        --contract "$IMPL_CONTRACT" \
-        --output "$IMPL_OUTPUT" \
-        --identity "$IDENTITY" \
-        --skip-checks "$SKIP_CHECKS"
+      bash "$HELPER" verify-with-contract-selection \
+        "$IMPL_OUTPUT" "$IDENTITY" "$VERIFICATION" "$SKIP_CHECKS" \
+        "$TASK_DESCRIPTION" "$TASK_TYPE_OVERRIDE" "$PERSONA"
       ;;
 
     asymmetric-challenger)
-      # medium-trust — verify implementer first (full checks; SKIP_CHECKS empty)
-      node ~/Documents/claude-toolkit/scripts/agent-team/contract-verifier.js \
-        --contract "$IMPL_CONTRACT" --output "$IMPL_OUTPUT" --identity "$IDENTITY"
+      # medium-trust — verifier full checks; spawn 1 challenger; record paired
+      bash "$HELPER" verify-with-contract-selection \
+        "$IMPL_OUTPUT" "$IDENTITY" "$VERIFICATION" "" \
+        "$TASK_DESCRIPTION" "$TASK_TYPE_OVERRIDE" "$PERSONA"
 
-      # then spawn 1 challenger (different persona preferred)
-      CHALLENGER=$(node ~/Documents/claude-toolkit/scripts/agent-team/agent-identity.js \
-        assign-challenger \
-          --exclude-persona "${IDENTITY%%.*}" \
-          --exclude-identity "$IDENTITY" \
-          --task "challenge-${IDENTITY}" | jq -r '.challenger.identity')
+      CHALLENGER=$(bash "$HELPER" assign-challenger-pair \
+        "$PERSONA" "$IDENTITY" "1" "challenge-${IDENTITY}" \
+        | jq -r '.challenger.identity')
       spawn_challenger "$CHALLENGER" "$IMPL_OUTPUT"   # follows kb:hets/challenger-conventions
 
-      # record paired result with convergence signal
-      node ~/Documents/claude-toolkit/scripts/agent-team/pattern-recorder.js record \
-        --task-signature "${IDENTITY%%.*}:actor-${IDENTITY%%.*}" \
-        --persona "${IDENTITY%%.*}" \
-        --identity "$IDENTITY" \
-        --verdict "$VERDICT" \
-        --paired-with "$CHALLENGER" \
-        --convergence "$CONVERGENCE"   # agree|disagree|n/a from challenger output analysis
+      bash "$HELPER" record-verdict \
+        "$IDENTITY" "$VERDICT" "$CHALLENGER" "$CONVERGENCE"
       ;;
 
     symmetric-pair)
-      # low-trust or unproven — full verification + 2 challengers
-      node ~/Documents/claude-toolkit/scripts/agent-team/contract-verifier.js \
-        --contract "$IMPL_CONTRACT" --output "$IMPL_OUTPUT" --identity "$IDENTITY"
+      # low-trust or unproven — verifier full checks; spawn 2 challengers; record paired
+      bash "$HELPER" verify-with-contract-selection \
+        "$IMPL_OUTPUT" "$IDENTITY" "$VERIFICATION" "" \
+        "$TASK_DESCRIPTION" "$TASK_TYPE_OVERRIDE" "$PERSONA"
 
-      # use the new assign-pair subcommand (cleaner than two assign-challenger calls)
-      PAIR=$(node ~/Documents/claude-toolkit/scripts/agent-team/agent-identity.js \
-        assign-pair \
-          --persona "${IDENTITY%%.*}" \
-          --count "$CHALLENGER_COUNT" \
-          --task "challenge-${IDENTITY}")
+      PAIR=$(bash "$HELPER" assign-challenger-pair \
+        "$PERSONA" "$IDENTITY" "$CHALLENGER_COUNT" "challenge-${IDENTITY}")
       CH1=$(echo "$PAIR" | jq -r '.pair[0]')
       CH2=$(echo "$PAIR" | jq -r '.pair[1]')
 
       spawn_challenger "$CH1" "$IMPL_OUTPUT"
       spawn_challenger "$CH2" "$IMPL_OUTPUT"
 
-      # record paired with convergence (compare CH1+CH2 outputs)
-      node ~/Documents/claude-toolkit/scripts/agent-team/pattern-recorder.js record \
-        --task-signature "${IDENTITY%%.*}:actor-${IDENTITY%%.*}" \
-        --persona "${IDENTITY%%.*}" \
-        --identity "$IDENTITY" \
-        --verdict "$VERDICT" \
-        --paired-with "${CH1},${CH2}" \
-        --convergence "$CONVERGENCE"
+      bash "$HELPER" record-verdict \
+        "$IDENTITY" "$VERDICT" "${CH1},${CH2}" "$CONVERGENCE"
       ;;
   esac
   ```
@@ -277,7 +162,7 @@ Follow the 7-step workflow in `skills/tech-stack-analyzer/SKILL.md`:
   node ~/Documents/claude-toolkit/scripts/agent-team/agent-identity.js stats --identity "$IDENTITY" | jq '.aggregate_quality_factors'
   ```
 
-  The chat agent (Claude reading `/build-team`) follows this flow per identity. The `spawn_implementer` and `spawn_challenger` placeholders are conventions documented in `kb:hets/spawn-conventions` and `kb:hets/challenger-conventions`.
+  The chat agent (Claude reading `/build-team`) follows this flow per identity. The `spawn_implementer` and `spawn_challenger` placeholders are conventions documented in `kb:hets/spawn-conventions` and `kb:hets/challenger-conventions`; they are Agent-tool invocations, NOT bash, and the helper script intentionally does not wrap them.
 
 ### 3. Show user the consolidated artifact
 
@@ -319,4 +204,4 @@ Same rationale as the prompt-enrichment gate: explicit user invocation makes the
 
 ## Phase status
 
-`/build-team` is the H.2.5 entry point. As of H.2.5, the skill scaffold + KB + pattern are implemented. The actual `/forge` integration for skill-bootstrapping uses the existing `/forge` command — which authors locally but does NOT yet do internet research. Internet-research gating is documented in [patterns/skill-bootstrapping.md](../skills/agent-team/patterns/skill-bootstrapping.md) and remains a follow-up. For now, missing skills surface to the user; if the user picks "proceed without specialization", the spawn proceeds with promise-mode references intact.
+`/build-team` is the H.2.5 entry point. As of HT.1.5, the substrate-primitive bash blocks are extracted to [`scripts/agent-team/build-team-helpers.sh`](../scripts/agent-team/build-team-helpers.sh) (third ADR-0002 application; markdown narrative + helper-script post-split shape). The skill scaffold + KB + pattern remain implemented per H.2.5. The actual `/forge` integration for skill-bootstrapping uses the existing `/forge` command — which authors locally but does NOT yet do internet research. Internet-research gating is documented in [patterns/skill-bootstrapping.md](../skills/agent-team/patterns/skill-bootstrapping.md) and remains a follow-up. For now, missing skills surface to the user; if the user picks "proceed without specialization", the spawn proceeds with promise-mode references intact.
