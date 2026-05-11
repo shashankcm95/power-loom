@@ -631,6 +631,69 @@ EOF
     failed=$((failed + 1))
   fi
 
+  # Test 87: H.9.10 — Atomics.wait true-sleep CPU-usage validation.
+  # Promoted from optional to required per architect HIGH-2 (only empirical
+  # proof of the H.9.10 fix target: busy-wait → true-sleep). Test 79 + 85
+  # measure wall-clock elapsed (preserved by Atomics.wait); Test 87 measures
+  # CPU usage during the wait (changed by Atomics.wait). Without Test 87,
+  # the fix's actual target is unverified.
+  #
+  # Approach: spawn child holding lock for ~2s; parent calls acquireLock
+  # with maxWaitMs=1500ms (will time out) and measures process.cpuUsage()
+  # before+after. Assert cpu_fraction < 0.1 (i.e., <10% CPU during wait).
+  # Atomics.wait true-sleep yields ~0.5-5% CPU; busy-wait would yield ~100%.
+  echo -n "  Test 87 (H.9.10 Atomics.wait true-sleep CPU-usage probe; expect <10% CPU during wait): "
+  T87_TMP=$(mktemp -d)
+  trap 'rm -rf "$T87_TMP"' EXIT
+  T87_LOCK="$T87_TMP/h910-lock"
+  T87_RESULT=$(node -e "
+    const fs = require('fs');
+    const path = require('path');
+    const { spawn } = require('child_process');
+    const { acquireLock } = require('$SCRIPT_DIR/scripts/agent-team/_lib/lock');
+    const lockPath = '$T87_LOCK';
+    // Spawn child that holds the lock for 2s using a real different PID.
+    const childScript = \`
+      const fs = require('fs');
+      fs.mkdirSync(require('path').dirname('\${lockPath}'), { recursive: true });
+      fs.writeFileSync('\${lockPath}', String(process.pid));
+      setTimeout(() => { try { fs.unlinkSync('\${lockPath}'); } catch {} }, 2200);
+    \`;
+    const child = spawn('node', ['-e', childScript], { stdio: 'ignore', detached: false });
+    // Wait for child to write lock file
+    const waitStart = Date.now();
+    while (!fs.existsSync(lockPath) && Date.now() - waitStart < 1000) { /* spin briefly */ }
+    if (!fs.existsSync(lockPath)) {
+      console.log('FAIL_NO_LOCK');
+      try { child.kill(); } catch {}
+      process.exit(1);
+    }
+    // Measure CPU + elapsed during acquire-with-contention
+    const cpuStart = process.cpuUsage();
+    const start = Date.now();
+    const got = acquireLock(lockPath, { maxWaitMs: 1500, sleepMs: 100 });
+    const elapsedMs = Date.now() - start;
+    const cpuEnd = process.cpuUsage(cpuStart);
+    const cpuUs = cpuEnd.user + cpuEnd.system;
+    const cpuFraction = cpuUs / 1000 / elapsedMs;
+    try { child.kill(); } catch {}
+    // got should be false (timed out); cpuFraction should be <0.1 (10%)
+    console.log(JSON.stringify({ got, elapsedMs, cpuUs, cpuFraction }));
+  " 2>&1)
+  rm -rf "$T87_TMP"
+  trap - EXIT
+  T87_GOT=$(echo "$T87_RESULT" | python3 -c "import json,sys; d=json.loads(sys.stdin.read()); print(d.get('got'))" 2>/dev/null)
+  T87_ELAPSED=$(echo "$T87_RESULT" | python3 -c "import json,sys; d=json.loads(sys.stdin.read()); print(d.get('elapsedMs'))" 2>/dev/null)
+  T87_CPU=$(echo "$T87_RESULT" | python3 -c "import json,sys; d=json.loads(sys.stdin.read()); print(d.get('cpuFraction'))" 2>/dev/null)
+  T87_CPU_OK=$(echo "$T87_RESULT" | python3 -c "import json,sys; d=json.loads(sys.stdin.read()); print(1 if d.get('cpuFraction', 1) < 0.1 else 0)" 2>/dev/null)
+  if [ "$T87_GOT" = "False" ] && [ "$T87_CPU_OK" = "1" ]; then
+    echo "OK (got=false elapsed=${T87_ELAPSED}ms cpu_fraction=${T87_CPU} < 0.1 = <10% CPU true-sleep confirmed)"
+    passed=$((passed + 1))
+  else
+    echo "FAIL: got=$T87_GOT elapsed=${T87_ELAPSED}ms cpu_fraction=${T87_CPU} (expected got=false + cpu_fraction<0.1) [raw: ${T87_RESULT:0:160}]"
+    failed=$((failed + 1))
+  fi
+
   # Test 65: H.8.7 — adr.js symlink defense (chaos M3)
   echo -n "  Test 65 (H.8.7 adr.js symlink defense; symlink in ADRS_DIR ignored): "
   T65_TMPDIR=$(mktemp -d)

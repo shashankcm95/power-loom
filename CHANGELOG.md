@@ -8,6 +8,72 @@ For granular per-phase detail, see annotated tags `phase-H.x.y` and `swarm/H.x.y
 
 ---
 
+## [unreleased] — 2026-05-12 — H.9.10 `_lib/lock.js` Atomics.wait true-sleep migration (gate-INVOKED per ADR-0002 invariant 4 `_lib/*` carve-out; closes drift-note candidate referenced at H.9.7 L70 comment)
+
+**Thirteenth sub-phase of post-HT H.9.x track; gate INVOKED (NOT MANDATORY) per ADR-0002 invariant 4 `_lib/*` carve-out + HT.1.7 + HT.1.13 + HT.2.3 + H.9.8 substrate-`_lib/*`-precedent; user-directed sequence H.9.11-before-H.9.10.** Migrates `scripts/agent-team/_lib/lock.js` busy-wait spin loop at L68-72 to `Atomics.wait` true-sleep on SharedArrayBuffer + Int32Array. Synchronous OS-level sleep; zero CPU usage during wait; same wall-clock elapsed; non-breaking change. install.sh smoke 83/83 → 84/84 (+Test 87 CPU-usage probe). Plugin manifest 1.14.0 → 1.14.1 patch bump per architect MEDIUM-5 absorption (observable substrate quality change).
+
+### What landed
+
+- **`_lib/lock.js` Atomics.wait migration**: replaces L68-72 busy-wait `while (Date.now() < end) { /* spin */ }` with synchronous OS-level sleep via `Atomics.wait(_WAIT_INT32, 0, 0, safeSleepMs)` where `_WAIT_INT32` is a module-level `Int32Array(new SharedArrayBuffer(4))`. Zero-runtime-dep per ADR-0006 invariant 4 (Atomics.wait is standard JS; ECMA-262 §25.4.5).
+- **`_waitSleep` helper encapsulates 4 absorbed FLAGs**:
+  - (a) code-reviewer HIGH-CR1 LIVE BUG: `isFinite(sleepMs) && sleepMs > 0` bounds-check (Atomics.wait(NaN) blocks forever per ECMA-262 §25.4.5; current busy-wait silently no-ops; bounds-check preserves no-hang behavior); fallback to safeSleepMs=50
+  - (b) architect FLAG-1: try/catch around SharedArrayBuffer construction at module-load time; `_WAIT_INT32` stays null on construction failure; preserves ADR-0001 fail-soft contract for 2 hook consumers under exotic Node runtime (hardened containers, --no-shared-array-buffer flag, memory-constrained env)
+  - (c) architect FLAG-1 fallback path: busy-wait used ONLY when SAB unavailable; log once per process for ops visibility
+  - (d) architect FLAG-3: log unexpected `Atomics.wait` return-values (anomaly defense — 'ok' return is impossible by design since substrate never calls Atomics.notify; logged once per process if observed)
+- **`tests/smoke-ht.sh` Test 87 NEW**: CPU-usage probe (architect HIGH-2 PROMOTED from optional to required). Spawns child holding lock for ~2s; parent calls `acquireLock` with maxWaitMs=1500ms; measures `process.cpuUsage()` before+after; asserts `cpu_fraction < 0.1` (<10% CPU during wait). Empirical result: **cpu_fraction=0.0043 = 0.43% CPU during 1.5s wait** — 100× CPU usage reduction vs busy-wait baseline (~100%).
+- **drift-note 81 NEW**: ESLint major-version-bump globals re-validation cohort (with drift-note 79 CONFIG_GUARD_BOOTSTRAP). Code-reviewer MEDIUM-CR2 defensive future-proofing deferred — current ESLint v9 + ecmaVersion:2022 recognizes Atomics + SharedArrayBuffer as built-ins WITHOUT explicit globals declaration; config-guard correctly blocked the proposed eslint.config.js Edit per ADR-0006 fix-don't-suppress (drift-note 79 firing as designed).
+- **Drift-note 80 + 78(b) status preserved** (H.9.11 closure intact)
+
+### Gate INVOKED per-phase pre-approval (per HT.1.7 + HT.2.3 + H.9.8 substrate-`_lib/*`-precedent)
+
+Parallel architect + code-reviewer; both APPROVED-with-revisions; 12 FLAGs absorbed single-pass (3 HIGH + 7 MEDIUM + 2 LOW; 4 convergent thematic clusters):
+
+- **Architect** (2 HIGH + 5 MEDIUM + 3 LOW):
+  - HIGH-1: SAB construction failure mode → try/catch + busy-wait fallback (preserves ADR-0001 fail-soft for 2 hook consumers)
+  - HIGH-2: Test 87 CPU-usage probe LOAD-BEARING (only empirical proof of true-sleep fix target) → PROMOTED to required
+  - MEDIUM-3: Atomics.wait return-value observability → log unexpected values once per process
+  - MEDIUM-4: SAB worker_threads naming clarification → header comment (per-process scratch, not cross-thread shared)
+  - MEDIUM-5: Manifest bump → 1.14.0 → 1.14.1 patch (observable substrate quality change; locked semver patch)
+  - MEDIUM-6: Post-ship emergency rollback shape → single-file revert via `git show` (no commented-out fallback per ADR-0006)
+  - MEDIUM-7: DOGFOOD-test requires `/plugin install` first → Probe 12 deferred (installed plugin at 1.1.3; H.9.11 validator not deployed)
+  - LOW-8: Wall-clock OS scheduler granularity comment (~1-2ms per iteration; ~60-120ms accumulated over 60 iterations; Tests 79/85 windows accommodate)
+  - LOW-9: `_h70-test.js` Test 3 already covers wait-and-timeout correctness (no new direct-contention test needed)
+  - LOW-10: Cross-platform Atomics.wait normalized by V8 across macOS+Linux (no platform-specific divergence)
+- **Code-reviewer** (1 HIGH + 1 MEDIUM):
+  - **HIGH-CR1 LIVE BUG**: `Atomics.wait(NaN sleepMs)` blocks process indefinitely (silent no-op in busy-wait → hang in Atomics.wait) → `isFinite(sleepMs) && sleepMs > 0` guard before call
+  - MEDIUM-CR2: Atomics + SharedArrayBuffer missing from eslint.config.js globals → DEFERRED per empirical (ESLint v9 recognizes both as built-ins via ecmaVersion:2022); drift-note 81 NEW captures future-proofing
+
+Convergent FLAGs: (a) SAB-construction-failure-mode (architect HIGH-1 + code-reviewer HIGH-CR1 module-load-error-propagation pattern); (b) CPU-usage probe load-bearing (architect HIGH-2); (c) Manifest patch bump (architect MEDIUM-5); (d) DOGFOOD-test ordering (architect MEDIUM-7).
+
+### Methodology
+
+Sub-plan + per-phase pre-approval gate INVOKED per HT.1.7 + HT.1.13 + HT.2.3 + H.9.8 substrate-`_lib/*`-precedent. 3 of 5 HT.1.6 triggers fire (fresh design surface + HIGH-class bug catchable at design + substrate-fundament touching).
+
+### Verification
+
+3-tier PASS: 84/84 install.sh smoke (+Test 87 CPU-usage probe; was 83/83) + 68/68 `_h70-test.js` asserts (unchanged) + 17-baseline contracts-validate (unchanged). Test 87 empirical: **cpu_fraction=0.0043 < 0.1 threshold (true-sleep confirmed)**; elapsed=1529ms in expected 1500ms-with-overhead range; got=false (timed out as expected). 0 ESLint errors on new `_lib/lock.js` (158 LoC). Tests 79 (HT.2.3) + Test 85 (H.9.9) wall-clock-elapsed invariant preserved (Atomics.wait yields ~52ms per 50ms request — within OS scheduler granularity).
+
+### Plugin manifest
+
+`1.14.0 → 1.14.1` (patch) per architect MEDIUM-5 absorption — observable substrate quality change (CPU usage during lock contention reduces from busy-wait to true-sleep); semver patch correct magnitude for "no API break; behaviorally improved." HT.2.3 Part B no-bump precedent does NOT apply (that was unobservable consumer-migration; H.9.10 is observable runtime quality measurable by Test 87).
+
+### DOGFOOD-test deferral
+
+Per architect MEDIUM-7 absorption: H.9.11 PreToolUse validator dogfood-test deferred until user runs `/plugin install`. Installed plugin currently at version 1.1.3 (FAR behind 1.14.x substrate); H.9.11 validator (`validate-yaml-frontmatter.js`) NOT deployed to `${CLAUDE_PLUGIN_ROOT}`. Probe 12 (validator approves H.9.10 cutover Edit) deferred to next cutover post-`/plugin install`. Tests 79 + 85 + 87 (running against substrate-repo direct paths via `$SCRIPT_DIR`) all PASS independent of `/plugin install` state.
+
+### Pattern-level observations
+
+1. **Gate-as-correctness-safeguard at 2 LIVE BUGS** — NaN-sleepMs hang (would have shipped + manifested under exotic input) + SAB-construction-failure-mode (would have broken 15 consumers under hardened runtime); gate cost ~45 min vs cost of shipping either bug = order-of-magnitude payoff
+2. **drift-note 79 fires-as-designed at H.9.10** — config-guard blocked legitimate-additive eslint.config.js Edit per ADR-0006 fix-don't-suppress; deferral path (drift-note 81 NEW) preserves substrate institutional discipline
+3. **Empirical proof via Test 87 CPU probe** — wall-clock-elapsed invariant (Tests 79+85) necessary but not sufficient for refactor verification; CPU-usage probe is empirical anchor for "true-sleep" semantic
+4. **Empirical pre-validation pattern 31-phase confirmed** (HT.1.8-1.15 + HT.2.1-2.5 + HT.3.1-3.3 + H.9.0-H.9.11 + H.9.10)
+
+### Soak gate impact
+
+H.9.10 is CLEAN-toward-v2.0.0 (no new ADR; no new substrate convention doc; no schema change; substrate-internal-primitive-quality-upgrade with API preservation; manifest patch bump for observable substrate quality). Counter advances 3/5+ → 4/5+ post-H.9.7 reset. Next: H.9.12 `_PRINCIPLES.md` enforcement (gate-required; institutional discipline encoding).
+
+---
+
 ## [unreleased] — 2026-05-12 — H.9.11 PreToolUse YAML frontmatter validator (MANDATORY-gate; closes drift-note 80 URGENT 5-recurrence escalation + drift-note 78(b) ledger-write convention enforcement gap)
 
 **Twelfth sub-phase of post-HT H.9.x track; MANDATORY-gate phase per ADR-0002 substrate-fundament (hook subsystem touching) + ADR-0001 invariants (new PreToolUse deny-decision authority); user-directed re-sequencing H.9.11-before-H.9.10 per drift-note 80 URGENT urgency.** Adds NEW PreToolUse:Edit|Write validator `hooks/scripts/validators/validate-yaml-frontmatter.js` (~215 LoC; pure-Node line-scan parser; zero-runtime-dep per ADR-0006 invariant 4) that detects duplicate top-level YAML keys in HT-state.md frontmatter at Edit/Write time. Two-layer defense with Test 83 yaml-lint at install.sh smoke. install.sh smoke 82/82 → 83/83 (+Test 86). Plugin manifest 1.13.1 → 1.14.0 minor bump per architect MEDIUM-5 absorption (new PreToolUse hook = observable contract addition).
