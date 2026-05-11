@@ -518,6 +518,49 @@ EOF
     failed=$((failed + 1))
   fi
 
+  # Test 85: H.9.9 — error-critic.js lock-contention fail-soft contract.
+  # Validates ADR-0001 invariant 2 (hooks never block on hook errors) + invariant 3
+  # (every fail-open path goes through logger so failure is observable).
+  # Approach: write parent shell's $$ PID (guaranteed-alive) into LOCK_PATH;
+  # acquireLock probes via process.kill(pid, 0) — pid is alive so probe succeeds
+  # -> wait loop continues -> 2000ms LOCK_TIMEOUT_MS expires -> acquireLock returns
+  # false -> error-critic.js logs lock_timeout + returns silently (fail-soft).
+  # Per H.9.9 gate architect HIGH-2 + code-reviewer HIGH-CR3 + MED-CR4 + MED-CR6
+  # convergent absorption: stale-PID determinism + trap cleanup + lock_timeout
+  # log assertion + ms timing.
+  echo -n "  Test 85 (H.9.9 error-critic.js lock-contention fail-soft contract; ADR-0001 invariants 2+3): "
+  h99_session="h99-test-$$"
+  h99_failure_dir="${TMPDIR:-/tmp}/.claude-toolkit-failures/$h99_session"
+  h99_log="$HOME/.claude/logs/error-critic.log"
+  mkdir -p "$h99_failure_dir"
+  mkdir -p "$(dirname "$h99_log")"
+  touch "$h99_log"
+  echo "$$" > "$h99_failure_dir/.lock"
+  trap 'rm -f "$h99_failure_dir/.lock" 2>/dev/null' EXIT
+  h99_log_size_before=$(stat -f %z "$h99_log" 2>/dev/null || stat -c %s "$h99_log" 2>/dev/null || echo 0)
+  h99_start_ms=$(node -e "console.log(Date.now())")
+  H99_EXIT=0
+  h99_result=$(echo '{"tool_name":"Bash","tool_input":{"command":"npm test"},"tool_response":{"stderr":"Error: failed","is_error":true}}' | CLAUDE_SESSION_ID="$h99_session" node "$SCRIPT_DIR/hooks/scripts/error-critic.js" 2>/dev/null) || H99_EXIT=$?
+  h99_end_ms=$(node -e "console.log(Date.now())")
+  h99_elapsed_ms=$((h99_end_ms - h99_start_ms))
+  rm -f "$h99_failure_dir/.lock"
+  trap - EXIT
+  h99_log_size_after=$(stat -f %z "$h99_log" 2>/dev/null || stat -c %s "$h99_log" 2>/dev/null || echo 0)
+  h99_log_delta=$((h99_log_size_after - h99_log_size_before))
+  if [ $h99_log_delta -gt 0 ]; then
+    h99_log_has_timeout=$(tail -c $((h99_log_delta + 100)) "$h99_log" 2>/dev/null | grep -c 'lock_timeout' || echo 0)
+  else
+    h99_log_has_timeout=0
+  fi
+  if [ $H99_EXIT -eq 0 ] && [ -z "$h99_result" ] && [ $h99_elapsed_ms -ge 1500 ] && [ $h99_elapsed_ms -le 3500 ] && [ $h99_log_has_timeout -ge 1 ]; then
+    echo "OK (exit=0 + no forcing instruction + elapsed=${h99_elapsed_ms}ms in 1500-3500ms + lock_timeout logged)"
+    passed=$((passed + 1))
+  else
+    echo "FAIL: exit=$H99_EXIT result='${h99_result:0:60}' elapsed=${h99_elapsed_ms}ms log_delta=$h99_log_delta lock_timeout_count=$h99_log_has_timeout"
+    failed=$((failed + 1))
+  fi
+  rm -rf "$h99_failure_dir" 2>/dev/null
+
   # Test 65: H.8.7 — adr.js symlink defense (chaos M3)
   echo -n "  Test 65 (H.8.7 adr.js symlink defense; symlink in ADRS_DIR ignored): "
   T65_TMPDIR=$(mktemp -d)

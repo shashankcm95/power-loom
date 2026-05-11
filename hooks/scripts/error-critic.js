@@ -49,24 +49,42 @@ const crypto = require('crypto');
 const { log } = require('./_log.js');
 const logger = log('error-critic');
 
-// H.7.10 — withLock primitive for RMW race protection (mira C-2 fix).
-// Two candidate paths: in-repo (../../scripts/agent-team/_lib/lock) and
-// installed-plugin location (~/.claude/scripts/agent-team/_lib/lock).
-// Fallback: no-op (lock-not-available) so the hook never crashes — but logs
-// the fallback once so operators can fix the install.
-let withLock;
+// H.9.9 — fail-soft contract upgrade per ADR-0001 invariant 2 (hooks never
+// block on hook errors). Migrated from `withLock` (which exits 2 on timeout
+// via `_lib/lock.js:88-89`; VIOLATES ADR-0001) to `acquireLock + releaseLock`
+// primitives that return false-on-timeout. Mirrors HT.2.3 Part B precedent
+// for session-end-nudge.js. Two candidate paths: in-repo + installed-plugin.
+//
+// Fallback semantic INVERTED from H.7.10 (which proceeded unlocked on missing
+// primitive — silently regressed C-2 race protection). Now: fail-soft skip
+// (acquireLock=()=>false) means lock-not-available causes RMW skip + logs
+// observability event. Loses escalation for this firing; preserves observability
+// + correctness invariants per ADR-0001 invariants 2 + 3.
+//
+// typeof guard catches structurally-broken `_lib/lock.js` (e.g., exports
+// `{ withLock }` only without the new pair) before downstream TypeError.
+let acquireLock, releaseLock;
 try {
-  withLock = require('../../scripts/agent-team/_lib/lock').withLock;
+  ({ acquireLock, releaseLock } = require('../../scripts/agent-team/_lib/lock'));
+  if (typeof acquireLock !== 'function' || typeof releaseLock !== 'function') {
+    throw new Error('_lib/lock.js API shape mismatch — missing acquireLock or releaseLock export');
+  }
 } catch {
   try {
-    withLock = require(path.join(os.homedir(), '.claude', 'scripts', 'agent-team', '_lib', 'lock')).withLock;
+    ({ acquireLock, releaseLock } = require(path.join(os.homedir(), '.claude', 'scripts', 'agent-team', '_lib', 'lock')));
+    if (typeof acquireLock !== 'function' || typeof releaseLock !== 'function') {
+      throw new Error('_lib/lock.js API shape mismatch');
+    }
   } catch {
-    // Lock primitive unavailable — fallback no-op preserves H.7.7 behavior
-    // but loses RMW race protection. Logged once at module load.
-    withLock = (_lockPath, fn) => fn();
+    // Lock primitive unavailable — fail-soft skip preserves ADR-0001 invariant 2
+    // (never block on hook errors) + invariant 3 (observable via log event).
+    // Loses escalation for this firing; strictly better than unlocked RMW
+    // which would silently regress H.7.10 mira C-2 race fix.
+    acquireLock = () => false;
+    releaseLock = () => {};
     logger('lock_primitive_missing', {
       tried: ['../../scripts/agent-team/_lib/lock', '~/.claude/scripts/agent-team/_lib/lock'],
-      fallback: 'noop',
+      fallback: 'fail-soft-skip',
     });
   }
 }
@@ -83,6 +101,13 @@ const SESSION_ID = process.env.CLAUDE_SESSION_ID
 // readable in the forcing instruction.
 const FAILURE_DIR = path.join(os.tmpdir(), '.claude-toolkit-failures', SESSION_ID);
 const LOCK_PATH = path.join(FAILURE_DIR, '.lock');
+// H.9.9 — lock-acquisition timeout in ms. Matches HT.2.3 Part B precedent for
+// session-end-nudge.js (2000ms for Stop hook). PostToolUse hooks fire more
+// frequently but contention is rare in single-agent flows + bounded in
+// multi-agent HETS flows. Fail-soft skip on timeout means at most 1 missed
+// escalation per contention window, which is acceptable trade-off (per
+// architect MED-2 absorption at H.9.9 gate).
+const LOCK_TIMEOUT_MS = 2000;
 const ESCALATION_THRESHOLD = 2;
 const LAST_N_ERRORS = 5;
 const MAX_ERROR_BYTES = 800; // truncate long stderr to keep injection compact
@@ -200,13 +225,24 @@ process.stdin.on('end', () => {
     const countFile = path.join(FAILURE_DIR, `${key}.count`);
     const logFile = path.join(FAILURE_DIR, `${key}.log`);
 
-    // H.7.10 — wrap count + log RMW blocks in withLock to close mira C-2
-    // race finding. Concurrent PostToolUse fires (batched Bash, multi-agent
-    // HETS flows) previously caused lost-update undercount. Using the H.3.2
-    // canonical primitive from scripts/agent-team/_lib/lock.js.
+    // H.9.9 — migrated from withLock to acquireLock+releaseLock for hook
+    // fail-soft contract per ADR-0001 invariant 2. On lock-acquisition timeout
+    // (LOCK_TIMEOUT_MS=2000ms), return silently with log event per ADR-0001
+    // invariant 3 (observability via lock_timeout). Silent-skip-vs-stale-count
+    // decided silent-skip per architect MED-3 absorption at gate (emitting
+    // forcing instruction with stale count would risk undercount or
+    // unsynchronized write).
     let count = 0;
     let kept = '';
-    withLock(LOCK_PATH, () => {
+    const haveLock = acquireLock(LOCK_PATH, { maxWaitMs: LOCK_TIMEOUT_MS });
+    if (!haveLock) {
+      logger('lock_timeout', { timeout_ms: LOCK_TIMEOUT_MS });
+      return;
+    }
+    try {
+      // H.7.10 — count + log RMW blocks (closes mira C-2 race finding).
+      // Concurrent PostToolUse fires (batched Bash, multi-agent HETS flows)
+      // would otherwise cause lost-update undercount.
       // Read current count (0 if first failure).
       try {
         count = parseInt(fs.readFileSync(countFile, 'utf8').trim(), 10) || 0;
@@ -236,7 +272,9 @@ process.stdin.on('end', () => {
       const entries = combined.split(/^(?=--- Failure #)/m).filter((s) => s.trim().startsWith('--- Failure #'));
       kept = entries.slice(-LAST_N_ERRORS).join('');
       fs.writeFileSync(logFile, kept);
-    });
+    } finally {
+      releaseLock(LOCK_PATH);
+    }
 
     logger('failure-recorded', { key, count, command: command.slice(0, 100) });
 

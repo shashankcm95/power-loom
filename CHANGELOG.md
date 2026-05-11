@@ -8,6 +8,72 @@ For granular per-phase detail, see annotated tags `phase-H.x.y` and `swarm/H.x.y
 
 ---
 
+## [unreleased] — 2026-05-12 — H.9.9 error-critic.js fail-soft contract upgrade per ADR-0001 invariant 2 (MANDATORY-gate; closes HT.2.3 Part B deferred-work cohort)
+
+**Eleventh sub-phase of post-HT H.9.x track; MANDATORY-gate phase per ADR-0002 substrate-fundament + ADR-0001 invariants; the highest-stakes phase shape in H.9.x trajectory (touches load-bearing ADR-0001 invariant 2).** Migrates `hooks/scripts/error-critic.js` from `withLock` (exits 2 on lock-acquisition timeout via `_lib/lock.js:88-89`; VIOLATES ADR-0001 invariant 2) to `acquireLock` + `releaseLock` primitives (return false-on-timeout). Mirrors HT.2.3 Part B Option B2 pattern. install.sh smoke 81/81 → 82/82 (+Test 85). NO manifest bump (HT.2.3 Part B exact-analogue precedent).
+
+### What landed
+
+- **error-critic.js migration**: 3-tier `withLock` loading (L57-72) → 3-tier `{ acquireLock, releaseLock }` destructure loading with typeof guard + fail-soft skip fallback on missing primitive
+- **LOCK_TIMEOUT_MS = 2000** constant placed after `LOCK_PATH` (mirrors HT.2.3 Part B session-end-nudge.js precedent)
+- **RMW migration** (L209-239 in original; now ~L228-274): `withLock(LOCK_PATH, () => {...})` → explicit `acquireLock + if !haveLock fail-soft skip + try/finally releaseLock` pattern
+- **Test 85** in `smoke-ht.sh`: validates ADR-0001 invariants 2+3 via stale-PID determinism (parent shell $$ PID held in lock; acquireLock probe finds alive PID; waits to LOCK_TIMEOUT_MS; returns false; error-critic.js logs lock_timeout + returns silently) + Node ms-resolution timing in 1500-3500ms envelope + grep -q lock_timeout assertion on log + trap EXIT cleanup
+- **drift-note 80 ESCALATED**: 5th recurrence of cutover-edit-time YAML-violation pattern (my Edit pattern at cutover keeps duplicating `last_session_phase_priors:` opener); codification doesn't enforce author discipline; need URGENT deterministic enforcement (PreToolUse YAML validator OR pre-commit hook OR Edit-pattern change at cutover)
+
+### MANDATORY per-phase pre-approval gate (per ADR-0002 + ADR-0001 invariants)
+
+Parallel architect + code-reviewer; both APPROVED-with-revisions; 10 FLAGs absorbed single-pass (5 HIGH + 5 MEDIUM + 5 LOW; 2 convergent thematic clusters):
+
+- **Architect** (2 HIGH + 3 MEDIUM + 3 LOW):
+  - HIGH-1: Fallback no-op `acquireLock = () => true` would silently regress H.7.10 mira C-2 race protection — INVERTED to `acquireLock = () => false` (fail-soft skip RMW + observability)
+  - HIGH-2: Test 14 timing window 1-4s with `date +%s` too loose + live-PID `sleep 60 &` approach unreliable cross-platform — REWRITTEN with stale-PID determinism via parent $$ + Node Date.now() ms timing
+  - MED-1: Manifest bump drop per HT.2.3 Part B precedent (NO BUMP)
+  - MED-2: LOCK_TIMEOUT_MS = 2000ms keep + fail-soft-skip-acceptable-loss comment
+  - MED-3: Silent-skip-vs-stale-count emission correct (silent-skip per ADR-0001 invariant 2 + 3)
+  - LOW-1: DRY consolidation YAGNI (defer)
+  - LOW-2: Option B substrate codification path (Option A correct)
+  - LOW-3: process.exit(2) elimination removes protocol-ambiguity surface entirely
+- **Code-reviewer** (3 HIGH + 3 MEDIUM + 2 LOW):
+  - HIGH-CR1: return-scope verification (VERIFIED correct; not a real flag)
+  - **HIGH-CR2**: destructure-undefined risk if `_lib/lock.js` exports `{ withLock }` only — ADDED `typeof acquireLock !== 'function'` guard post-destructure to force fallback catch
+  - **HIGH-CR3**: Test 14 missing `lock_timeout` log probe — ADDED `grep -q 'lock_timeout'` assertion
+  - MED-CR4: Test 14 elapsed-time window unreliable on busy CI — TIGHTENED to 1500-3500ms via Node ms timing
+  - MED-CR5: Probe 8 vacuous pre+post migration (DROPPED; replaced with Probe 4 `grep -c withLock`)
+  - **MED-CR6**: Test 14 trap-on-error cleanup gap — ADDED `trap EXIT`
+  - LOW-CR7: logger naming difference (not a bug)
+  - LOW-CR8: LOCK_TIMEOUT_MS placement near LOCK_PATH per session-end-nudge precedent
+
+Convergent FLAGs: HIGH-1+HIGH-CR2 fallback-path-correctness + HIGH-2+HIGH-CR3+MED-CR4+MED-CR6 Test 14/85 shape. Both reviewers concur on absorb-FLAGs-first verdict.
+
+### Methodology
+
+Sub-plan + MANDATORY per-phase pre-approval gate per ADR-0002 substrate-fundament + ADR-0001 invariants. 5 of 5 HT.1.6 triggers fire.
+
+### Verification
+
+3-tier PASS: 82/82 install.sh smoke (+Test 85; was 81/81) + 68/68 `_h70-test.js` asserts (unchanged) + 16-baseline contracts-validate. Test 85 elapsed=2062ms in 1500-3500ms envelope; lock_timeout logged; exit 0; no forcing instruction. error-critic.js LoC 256 → 269 (+13 net). 0 live `withLock(` call sites remaining. 2 hook consumers of `_lib/lock.js` substrate-wide both on Option B2 pattern (cohort consistency).
+
+### Plugin manifest
+
+`1.13.1` UNCHANGED per architect MED-1 absorption (HT.2.3 Part B exact-analogue precedent — same shape fix on session-end-nudge.js did NOT bump per pure-internal-refactor convention).
+
+### ADR-0001 invariant 2 violation CLOSED
+
+`hooks/scripts/error-critic.js` was the last hook consumer of `withLock` (via `_lib/lock.js`); both hook consumers (session-end-nudge.js + error-critic.js) now on `acquireLock + releaseLock` pattern with hook fail-soft contract preserved.
+
+### Pattern-level observations
+
+1. **2-hook cohort consistency** — Option A consistent across both hook consumers (session-end-nudge.js HT.2.3 Part B + error-critic.js H.9.9); demonstrates substrate institutional pattern propagation
+2. **Gate-as-correctness-safeguard validated** — 5 HIGH FLAGs caught structural errors (silent race regression + destructure-undefined TypeError + test-timing-unreliable + missing log observability + cleanup-gap) before implementation lock-in; gate cost ~30-45 min paid back many times over
+3. **5-recurrence cutover-edit-time YAML-violation pattern** (drift-note 80) reaches escalation threshold — institutional fix needed urgently (H.9.11 scope expansion candidate)
+4. **Empirical pre-validation pattern 29-phase confirmed** (HT.1.8-1.15 + HT.2.1-2.5 + HT.3.1-3.3 + H.9.0-H.9.9)
+
+### Soak gate impact
+
+H.9.9 is CLEAN-toward-v2.0.0 (NO new ADR; NO new substrate convention doc; NO schema change; NO manifest bump; helper API unchanged; substrate hook behavior strictly-better per ADR-0001 invariant compliance restoration). Counter advances 1/5+ → 2/5+ post-H.9.7 reset. Next: H.9.10 Atomics.wait true-sleep migration in `_lib/lock.js` (gate; closes `_lib/lock.js` L70-72 drift-note candidate).
+
+---
+
 ## [unreleased] — 2026-05-12 — H.9.8 atomic-write DRY 9-site consolidation + helper API additive cleanup-on-error + H.9.7.1-equivalent yaml-lint hotfix-fold
 
 **Tenth sub-phase of post-HT H.9.x track; substantive multi-site `_lib/*` migration + helper API additive enhancement; FIRST post-H.9.7 clean phase toward v2.0.0 soak gate.** Migrates 9 substrate sites to `scripts/agent-team/_lib/atomic-write.js` shared helper (8 originally enumerated in helper's 2026-05-10 header inventory + 9th gate-surfaced site `quality-factors-backfill.js:124-128` via code-reviewer HIGH-CR3 catch — closes WEAKEST tmp form bare `.tmp` no pid suffix). install.sh smoke 81/81 unchanged. `_h70-test.js` 64 → 68 (+4 from 2 new cleanup-on-error tests). Plugin manifest 1.13.0 → 1.13.1 (patch — helper API contract additive; cleanup-on-error post-condition strictly strengthens).
