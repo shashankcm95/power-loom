@@ -8,6 +8,84 @@ For granular per-phase detail, see annotated tags `phase-H.x.y` and `swarm/H.x.y
 
 ---
 
+## [unreleased] — 2026-05-11 — H.9.5.1 absorb post-compact audit FLAGs — codifies H.9.5 narrative-quoting convention as 5th lightweight BACKLOG decision-record entry
+
+**Sixth sub-phase of post-HT H.9.x track per user-reframed v2.0 trajectory; pure-doc absorb-FLAGs phase.** Post-compact parallel architect + code-reviewer cumulative-trajectory audit of H.9.0-H.9.5 (option b per pre-compaction user direction `let's go with b + c just to be safe`) completed; architect verdict `minor-correction-needed / absorb-FLAGs-first` (1 HIGH + 1 MEDIUM + 1 LOW); code-reviewer verdict `semantically-lossless / proceed-with-H.9.6` (0 HIGH + 2 MEDIUM + 1 LOW). H.9.5.1 absorbs the architect HIGH FLAG by codifying as the 5th lightweight BACKLOG decision-record entry. install.sh smoke 79/79 unchanged. **No plugin manifest bump** per pure-doc absorb-FLAGs convention.
+
+### Context — architect HIGH FLAG
+
+H.9.5 introduced two institutional artifacts implicitly: (1) a substrate authoring convention — `wrap narrative frontmatter values in "..."; use backticks for internal inline-code emphasis`; (2) an HT-state.md schema-like rename — `last_session_phase_prior:` × 8 → `last_session_phase_priors:` block-list. Both qualify as `institutional discipline encoding` per HT.1.6 trigger 4 + ADR-0002 gate criterion, but H.9.5 declared `NO institutional discipline encoding` in its decision rationale matrix. H.9.5 sub-plan line 163 self-recognized the gap (`codification deferred unless drift recurs`).
+
+Architect option (b) `codify convention as lightweight BACKLOG entry` chosen over option (a) `retroactive per-phase pre-approval gate` per minimal-institutional-load principle + H.9.0 4th-entry post-hoc-codification precedent (H.9.0 codified ledger-authoring convention post-hoc after 2026-05-11 CI markdownlint failure surfaced the gap; H.9.5.1 follows same post-hoc shape for narrative-quoting).
+
+### What landed
+
+- **5th lightweight BACKLOG decision-record entry** at top of `skills/agent-team/BACKLOG.md` (~90 LoC) codifying:
+  - Substrate frontmatter narrative scalar values wrapped in double-quoted form
+  - Internal `"..."` within those values rendered as backticks (substrate inline-code convention)
+  - `last_session_phase_priors:` block-list shape (vs duplicate-key form)
+  - Migration-script-at-substrate-path + delete-post-ship transparency pattern (with future-recommendation to include script transformation logic in sub-plan prose)
+  - Cross-references to Test 83 enforcement (H.9.5 commits `4c078ba` + `b07ac3d`)
+  - Explicit non-promotion-to-ADR rationale per HT.0.9-verify FLAG-5 right-sizing
+- **HT-state.md frontmatter cutover**: `last_session_phase` H.9.5 → H.9.5.1 + H.9.5 demoted to top of `last_session_phase_priors:` block-list + new `h_9_5_1_decision` / `h_9_5_1_branch_target` / `h_9_5_1_verify_verdict` / `h_9_5_1_audit_findings` keys + `v2_0_0_clean_phases_progress` 6 → 7 of 5+ + `ht_track_status` roadmap re-bucket
+- **Roadmap re-bucket per architect cumulative-audit FLAG (d)**:
+  - H.9.7 ESLint baseline re-bucketed from `borderline gate` → **MANDATORY-gate** (ESLint default rules + lint config decisions = institutional discipline encoding)
+  - H.9.13 Tier-3 sweep (8 MEDIUM/LOW findings) annotated `split-per-finding-on-execution` (avoid H.9.4/H.9.5 multi-component-atomic-ship antipattern at larger scale)
+- **Drift-note 77 added** (combined architect LOW + code-reviewer LOW): Test 83 frontmatter-extraction robustness — (a) `tests/smoke-ht.sh:424` unquoted glob expansion `"$T83_TMPDIR"/fm-*.yaml` could exceed argv limits at substrate scale ~4000+ files or constrained shells (architect LOW); (b) `tests/smoke-ht.sh:419` `head -1 "$T83_FILE" | grep -q "^---$"` has zero tolerance for files with leading BOM/blank-line (code-reviewer LOW). Future-proofing deferred to H.9.6+
+- **Ledger entries**: this CHANGELOG entry + SKILL.md ledger entry
+- **Sub-plan**: `swarm/thoughts/shared/plans/2026-05-12-H.9.5.1-absorb-audit-flags.md`
+
+### Code-reviewer MEDIUM FLAGs — noted as documentation-quality, no retroactive action
+
+- **MEDIUM 1** — backtick substitution applied uniformly to all `"..."` inside values, not discriminating between inline-code, shell-quoted args, and natural-language prose (example: H.9.0 plan `methodology` field's `"**/*.md"` shell-arg rendered as `` `**/*.md` `` backtick-wrapped). `parseFrontmatter` strips outer quotes + does not interpret backticks; runtime parsed values identical pre/post-migration. Semantic drift is in archival documentation only, not operational. No retroactive fix needed.
+- **MEDIUM 2** — migration script logic not permanently captured as auditable artifact. `scripts/h95-fix-*.js` deleted post-ship; sub-plan captures intent in prose but exact skip-rule edge-case handling not reconstructable. New BACKLOG entry codifies recommendation: future migration scripts include full transformation logic in sub-plan prose (not just intent summary). No retroactive re-authoring of H.9.5 sub-plan.
+
+### Methodology
+
+Sub-plan-only per HT.1.6 decision-rationale-matrix + HT.1.12/HT.1.15/H.9.0 lightweight-decision-record-pattern precedent (5th application). 5 of 5 triggers absent. Per-phase pre-approval gate skipped with EXPLICIT decision rationale matrix per HT.1.6 convention.
+
+### Substantive-vs-clean
+
+H.9.5.1 is pure-doc absorb-FLAGs (codification-only of EXISTING-as-of-H.9.5 convention into substrate's existing lightweight decision-record-pattern shape). Counts as 7 of 5+ clean phases since HT.3.1.
+
+### Soak gate
+
+H.9.5.1 = **7 of 5+ clean phases** since HT.3.1. Threshold met since H.9.4. Progression: H.9.0 → H.9.1 → H.9.2 → H.9.3 → H.9.4 → H.9.5 → H.9.5.1.
+
+Roadmap (post-H.9.5.1 re-bucket): H.9.6 extend Test 80 scope (mechanical); H.9.7 ESLint baseline (MANDATORY-gate per FLAG-d re-bucket); H.9.8 atomic-write DRY (gate); **H.9.9 error-critic fail-soft (MANDATORY GATE per ADR-0002)**; H.9.10 Atomics.wait (gate); H.9.11 ADR-status PreToolUse hook (gate); H.9.12 `_PRINCIPLES.md` enforcement (gate); H.9.13 Tier-3 sweep (split-per-finding-on-execution); H.9.14 regex perf (gate); then v2.0.0 tag.
+
+### Verification
+
+- **install.sh smoke**: 79/79 (unchanged from H.9.5; pure-doc phase)
+- **_h70-test.js asserts**: 64/64 (unchanged)
+- **contracts-validate.js violations**: 16 baseline only (no regression)
+- **markdownlint (Test 80)**: 0 errors (unchanged)
+- **shellcheck (Test 81)**: 0 errors (unchanged)
+- **jq empty (Test 82)**: 0 errors (unchanged)
+- **yaml-lint (Test 83)**: 0 errors (unchanged; HT-state.md frontmatter additions remain YAML 1.2 valid)
+- BACKLOG.md decision-record-pattern entry count: 5 (was 4)
+
+### Plugin manifest
+
+`1.12.3` UNCHANGED per pure-doc absorb-FLAGs convention.
+
+### Wallclock
+
+~45 min end-to-end.
+
+### Pattern-level observations
+
+- **Post-shipping cumulative-trajectory audit as soak-gate-discipline mechanism**: pre-compaction `let's go with b + c just to be safe` direction triggered the audit; audit surfaced 1 HIGH FLAG that H.9.5 self-documented but deferred (sub-plan line 163); H.9.5.1 absorbs into existing decision-record-pattern shape. Substrate-as-testing-framework reframe encodes mechanically through audit-→-absorb cycle.
+- **Retroactive convention-codification path empirically validated** across 2 applications (H.9.0 4th-entry post-hoc after 2026-05-11 CI markdownlint failure surfaced gap; H.9.5.1 5th-entry post-hoc after cumulative audit surfaced gap). Same shape: implicit convention establishes via mechanical application → audit/CI/post-shipping surfaces → lightweight BACKLOG decision-record entry codifies. Institutionally lighter than retroactive gate; same audit-trail outcome.
+- **Architect-vs-code-reviewer audit complementarity**: architect found institutional FLAG (gate bypass); code-reviewer found 0 HIGH on semantic preservation. Both views compatible: semantically clean + institutionally needs codification. Each agent class catches different failure-mode shape; parallel-spawn methodology produces stronger coverage than single-agent verification.
+- **Empirical pre-validation pattern 23-phase confirmed** (HT.1.8-1.15 + HT.2.1-2.5 + HT.3.1-3.3 + H.9.0-H.9.5.1).
+
+### Next
+
+**H.9.6** — extend Test 80 markdownlint scope to `swarm/kb-architecture-planning/` (H.9.4 drift-note candidate + cumulative-audit confirms scope right-sized; mechanical phase; closes the markdownlint blind-spot where swarm/ planning docs are unchecked despite being substrate-authored content).
+
+---
+
 ## [unreleased] — 2026-05-11 — H.9.5 yaml-lint on substrate frontmatter — sibling format-discipline 4th application + strict YAML 1.2 conformance refactor
 
 **Fifth sub-phase of post-HT H.9.x track per user-reframed v2.0 trajectory.** H.9.5 closes a real substrate coverage gap: substrate frontmatter (130 `.md` files) was permissively parseable by substrate's own `parseFrontmatter` but rejected by strict YAML 1.2 parsers (yaml-lint, python yaml, js-yaml). Migration wraps 223 narrative scalar values + block-list items in double-quoted form across 12 files; consolidates 8 duplicate `last_session_phase_prior:` keys in HT-state.md into a single block-list under `last_session_phase_priors:`. Adds Test 83 with `npx --yes yaml-lint` on extracted frontmatter blocks; asserts exit 0. install.sh smoke 78/78 → 79/79. **No plugin manifest bump** per pure-content-migration convention.

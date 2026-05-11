@@ -2,6 +2,75 @@
 
 Deferred work from prior phases, captured here so nothing important gets silently dropped. Each entry: scope, rationale, dependencies, rough estimate.
 
+## Phase H.9.5.1 — Substrate frontmatter narrative-quoting convention + `last_session_phase_priors:` block-list shape — DECISION RECORD (lightweight)
+
+**Status**: shipped 2026-05-11. **Fifth** `decision-record-pattern: lightweight` entry in BACKLOG.md (HT.1.6 + HT.1.12 + HT.1.15 + H.9.0 + H.9.5.1). Authored post-compact after parallel architect + code-reviewer cumulative audit of H.9.0-H.9.5 trajectory surfaced that H.9.5 introduced this convention in practice (223 frontmatter entries rewrapped via auto-script + 8-key duplicate-key consolidation) without invoking the per-phase pre-approval gate per HT.1.6 trigger 4 `institutional discipline encoding`. H.9.5's own sub-plan (line 163) explicitly recognized the gap and deferred codification; H.9.5.1 absorbs the architect HIGH FLAG by codifying the convention as an entry of the established lightweight-decision-record-pattern shape rather than retroactively running a full pre-approval gate.
+
+### Convention (codified)
+
+**Substrate frontmatter narrative scalar values are wrapped in double-quoted YAML form**; internal `"..."` within those values render as backticks (substrate inline-code convention). This applies to ledger-shape frontmatter — CHANGELOG.md, skills/agent-team/SKILL.md frontmatter, skills/agent-team/BACKLOG.md frontmatter, swarm/thoughts/shared/HT-state.md, swarm/thoughts/shared/plans/*.md — where ledger entries contain prose narrative with embedded `:` characters that strict YAML 1.2 parsers reject as malformed mappings.
+
+| Pattern | Pre-H.9.5 form (BAD — YAML 1.2 invalid) | Post-H.9.5 form (GOOD) |
+|---------|----------------------------------------|------------------------|
+| Narrative scalar with embedded `:` | `key: H.9.5 SHIPPED on branch foo: did X. Bar: did Y.` | `key: "H.9.5 SHIPPED on branch foo: did X. Bar: did Y."` |
+| Internal double-quotes (inline-code emphasis) | `key: '... uses "key: value" syntax ...'` | ``key: "... uses `key: value` syntax ..."`` |
+| Block-list narrative items with embedded `:` | `key:\n  - H.9.4 SHIPPED on branch foo: did X.` | `key:\n  - "H.9.4 SHIPPED on branch foo: did X."` |
+
+**Substrate-stack-list convention**: when a ledger field accumulates prior values across phases (e.g., HT-state.md tracking the most-recent N phase ships), the form is a single block-list key with plural noun (`last_session_phase_priors:` block-list), NOT duplicate keys (`last_session_phase_prior:` × N which YAML disallows). Pre-H.9.5 HT-state.md had 8 duplicate `last_session_phase_prior:` keys; H.9.5 consolidated into single `last_session_phase_priors:` block-list (rename verified safe via grep on `scripts/` + `hooks/` — no programmatic consumers).
+
+### Why MD-like-pattern fires on bare narrative-with-`:` scalars
+
+YAML 1.2 spec § 9.1.2 (Block Scalar Headers): bare scalar values terminate at the first `:` followed by space-or-EOF. Substrate's permissive `parseFrontmatter` (line 142: `val.replace(/^["']|["']$/g, '')`) tolerates the divergence; strict parsers (yaml-lint, python yaml, js-yaml) reject with `bad indentation of a mapping entry`. Wrapping in `"..."` makes the entire value an explicit string scalar; internal `:` characters are no longer parser-significant.
+
+### Enforcement mechanism
+
+**Test 83** in `tests/smoke-ht.sh` (H.9.5 ship; commits `4c078ba` + `b07ac3d`) extracts frontmatter from each `.md` with `---` markers via `awk` + pipes all to `npx --yes yaml-lint`; fail-on-error. The substrate's local-verification harness now catches narrative-frontmatter format drift at smoke time (pre-commit). Future ledger writers who emit a bare `key: narrative with: colons` will fail Test 83 and learn the convention mechanically.
+
+### Migration-script-at-substrate-path pattern (transparency convention)
+
+H.9.5 introduced a sub-convention for one-time content migrations: write the migration script to `scripts/h<phase>-<purpose>.js` (substrate path), apply, delete post-ship. Rationale:
+
+- **fact-force-gate hook safety**: hook correctly refuses execution of `/tmp/*.js` (script outside transcript visibility = unsafe). Substrate-path migration scripts are auditable in the transcript.
+- **Transparency**: migration logic visible in pre-delete commit if needed for retrospective audit (`git show <commit-before-deletion>:scripts/h95-fix-frontmatter.js`).
+- **Disposal**: deleted post-ship since one-time utilities should not accumulate in `scripts/` long-term.
+
+**Recommendation for future migrations**: include the script's transformation logic (regex patterns, skip rules, edge-case handling) in the sub-plan's implementation strategy section as prose — not just `applied; deleted` — so the transformation is reconstructable from sub-plan alone if the deleted script's commit history is rebased away. Source: code-reviewer post-compact audit MEDIUM FLAG, H.9.5.1 absorption.
+
+### Scope bounds
+
+This convention is **content-format-scoped**: applies to substrate ledger frontmatter (`.md` files with `---`-fenced YAML frontmatter blocks). It does NOT apply to:
+
+- Substrate runtime JSON config files (already strict-syntax via `JSON.parse` at load time; covered by Test 82 `jq empty`)
+- ADR files (`swarm/adrs/*.md`) — these accumulate at codification time, not at every-phase-ship time; narrative-value usage is rarer; H.9.5 migration touched 0 ADR frontmatter blocks
+- Persona / contract / commands / skills frontmatter — typically declarative key-value pairs without narrative scalars; H.9.5 migration touched 0 of these
+
+### Why lightweight BACKLOG entry vs full ADR
+
+Per HT.0.9-verify FLAG-5 right-sizing + H.9.0 4th-entry precedent:
+
+- **Bounded scope**: convention applies to substrate ledger frontmatter narrative-scalar shape, not a general authoring discipline. Test 83 enforces it mechanically.
+- **No new institutional commitment** beyond the existing Test 83 gate enforcement (H.9.5 ship).
+- **Codification-only**: H.9.5 migration already established the convention by mechanical application across 223 entries. H.9.5.1 names + documents it; doesn't create new institutional weight.
+- **ADR ledger stays at 5** (ADR-0001/0002/0003/0004/0005); no new ADR cost.
+- **Matches HT.1.6 + HT.1.12 + HT.1.15 + H.9.0 precedent**: 4 prior lightweight decision-record entries land bounded conventions / decisions without ADR institutional weight. H.9.5.1 is the 5th in that pattern.
+
+### Why retroactive codification (H.9.5.1) rather than retroactive per-phase pre-approval gate
+
+Architect HIGH FLAG offered two options: (a) retroactive per-phase pre-approval gate on H.9.5's convention introduction + HT-state schema rename, OR (b) codify the convention as a lightweight BACKLOG decision-record entry. Option (b) chosen because:
+
+- **Minimal institutional load**: H.9.5 is in-tree + verified-clean (code-reviewer audit confirmed semantic preservation at 0 errors across 130 frontmatter blocks). Retroactive gate would add process overhead without changing the substrate state.
+- **Precedent**: H.9.0 4th-entry codified the bare-underscored-identifier convention post-hoc (after 2026-05-11 markdownlint CI failure surfaced the gap); H.9.5.1 follows the same shape post-hoc for narrative-quoting.
+- **Reframe alignment**: user reframe at v2.0 trajectory (`substrate is actually an underlying testing framework`) treats the substrate-as-discipline-encoding lens as load-bearing. Codification names what's true; gate-after-the-fact doesn't surface new information.
+
+### Cross-references
+
+- `tests/smoke-ht.sh` Test 83 — H.9.5 enforcement mechanism (commits `4c078ba` + `b07ac3d`)
+- `swarm/thoughts/shared/plans/2026-05-11-H.9.5-yamllint-frontmatter.md` — H.9.5 sub-plan (line 163 self-recognized codification deferral)
+- `swarm/thoughts/shared/plans/2026-05-12-H.9.5.1-absorb-audit-flags.md` — H.9.5.1 sub-plan (this absorption phase)
+- Post-compact audit `agentId: a45a2ae9f24d586c9` (architect) + `agentId: a986798d4eef447ad` (code-reviewer) — 2026-05-11 audit results
+- ADR-0005 slopfiles-authoring-discipline — sibling editorial-tier convention (predicate-vocabulary for `<important if>`); ADR-0005 is institutional; H.9.5.1 entry is bounded decision record
+- HT.1.6 + HT.1.12 + HT.1.15 + H.9.0 — 4 prior lightweight decision-record entries forming the pattern this 5th entry extends
+
 ## Phase H.9.0 — Ledger-entry authoring convention (backtick-wrap underscored identifiers) — DECISION RECORD (lightweight)
 
 **Status**: shipped 2026-05-11. **Fourth** `decision-record-pattern: lightweight` entry in BACKLOG.md (HT.1.6 + HT.1.12 + HT.1.15 + H.9.0). Authored after the 2026-05-11 CI markdown-lint failure post-HT.3.3 merge surfaced a recurring authoring gap: ledger entries reference identifiers like `_h70-test.js`, `_lib/lock`, `_lib/atomic-write`, `__test_internals__`, `_stripInlineComment` without backtick wrapping; same-line pair sites form MD037 emphasis-paired markdown that triggers markdownlint.
