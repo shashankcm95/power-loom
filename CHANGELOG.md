@@ -8,6 +8,44 @@ For granular per-phase detail, see annotated tags `phase-H.x.y` and `swarm/H.x.y
 
 ---
 
+## [unreleased] — 2026-05-11 — H.9.12.1 CI hotfix (single-commit `main` per H.9.6.1 precedent; closes Test 85 stat-cascade Linux/macOS portability bug + Test 81 shellcheck binary download network failure)
+
+**Single-commit hotfix on `main`** closing two latent CI failures surfaced post-H.9.12 push. No substrate runtime change; no manifest bump; no per-phase gate (0 of 5 HT.1.6 triggers fire). Files modified: `tests/smoke-ht.sh` (cascade reorder + system-shellcheck preference) + `.github/workflows/ci.yml` (apt-install shellcheck).
+
+### What landed
+
+- **Test 85 stat-cascade Linux/macOS portability fix** (`tests/smoke-ht.sh:540+548`): cascade `stat -f %z FILE 2>/dev/null || stat -c %s FILE 2>/dev/null` works on macOS BSD stat (first succeeds; second is illegal) but FAILS on Linux GNU stat where `-f` means `--file-system` (filesystem status mode), `%z` is interpreted as a path, and command EXITS 0 with multi-line output beginning with literal `File:` text on indented lines. Cascade short-circuits with non-numeric garbage. Then arithmetic `$((h99_log_size_after - h99_log_size_before))` at line 549 parses `File` as unbound variable under `set -u`. Bug introduced at H.9.9 (commit `fa3722a`); latent across H.9.9 + H.9.10 + H.9.11 + H.9.12 because local macOS tests pass. Fix: reorder cascade to `stat -c %s FILE 2>/dev/null || stat -f %z FILE 2>/dev/null || echo 0` (Linux GNU first; macOS BSD fall-through). Both platforms now yield numeric strings.
+- **Test 81 shellcheck binary download mitigation** (`tests/smoke-ht.sh:368-385`): `npx --yes shellcheck` downloads Haskell binary from GitHub releases per CI run; intermittent `socket hang up` on the download (observed 2026-05-11). Fix: prefer system `shellcheck` if available, fall back to `npx --yes shellcheck` only when system binary absent.
+- **CI workflow apt-install shellcheck** (`.github/workflows/ci.yml`): added pre-smoke step `sudo apt-get install -y -qq shellcheck` so CI runner has system binary. Eliminates network dep; saves ~10-15s per CI run.
+
+### Why no gate / no manifest bump
+
+- 0 of 5 HT.1.6 triggers fire: no fresh design surface (cascade-reorder is unique correct fix); no schema change; no option-axis decision; no institutional discipline encoding; no HIGH-class bug catchable at design (surfaced empirically via CI run)
+- Pure test infrastructure + CI workflow fix; substrate runtime code unchanged; no observable contract change
+- Mirrors H.9.6.1 hotfix precedent (single-test fix on smoke harness)
+
+### Verification
+
+- Local macOS smoke: 85/85 passed, 0 failed (unchanged)
+- Local macOS Test 81: OK via npx fallback (no system shellcheck on this dev box)
+- Local macOS Test 85: OK (elapsed=2101ms in 1500-3500ms; lock_timeout logged)
+- CI Linux expected: Test 85 `stat -c %s` returns numeric size immediately; Test 81 apt-installed shellcheck on PATH skips npx fetch entirely
+
+### Pattern observation
+
+**Latent-bug-shipped-multiple-phases**: H.9.9 introduced Test 85 stat cascade bug; persisted through H.9.10 + H.9.11 + H.9.12 because local macOS BSD stat behavior masked Linux GNU stat failure. CI was failing since fa3722a (5 commits before discovery). Substrate has structural test-only-on-author-platform blind spot for shell scripts; future shell-test additions should be platform-checked via CI before merge OR via local Docker-based Linux test.
+
+### Substrate state delta
+
+- install.sh smoke: 85/85 (unchanged)
+- _h70-test.js: 68/68 (unchanged)
+- contracts-validate.js: 17-baseline (unchanged; CI auto-passes via deployment validator settings.json-absent path)
+- Plugin manifest: 1.15.0 (unchanged)
+- Soak gate counter: **5/5+ THRESHOLD MET** (unchanged; hotfixes do NOT reset or advance counter per H.9.6.1 precedent)
+- Drift-notes: no new drift-notes; 79 + 78(a) + 81 + 82 OPEN; 80 + 78(b) CLOSED
+
+---
+
 ## [unreleased] — 2026-05-12 — H.9.12 `_PRINCIPLES.md` enforcement extension (MANDATORY-gate per HT.1.6 trigger 4 institutional discipline encoding + ADR-0002 substrate-fundament; 15 FLAGs absorbed; 1 LIVE BUG caught at gate)
 
 **Fourteenth sub-phase of post-HT H.9.x track; MANDATORY-gate per ADR-0002 substrate-fundament (hook subsystem PreToolUse decision-authority expansion {approve} → {approve, block}) + HT.1.6 trigger 4 (institutional discipline encoding — encoding-of-encoding for `swarm/kb-architecture-planning/_PRINCIPLES.md` authoring quality bar codified at HT.1.10/H.9.4 but currently advisory-only prose).** Extends `hooks/scripts/validators/validate-kb-doc.js` (H.8.8; 255 LoC → 533 LoC) with Component A (HARD-block frontmatter checks: `kb_id` matches path + `version: 1` + `tags` ≥3 + `sources_consulted` ≥2 per `_PRINCIPLES.md` L42-46) + Component B (SOFT-advisory section checks; alias-tolerant matching covering Convention A backward-compat). Extends `scripts/agent-team/contracts-validate.js` (787 LoC → 897 LoC) with Component C (KB size cap audit: WARN ≥45, ERROR ≥51 per L36; currently N=15) + Component D (`kb-architecture-related-bidirectional` validator in WARN-ONLY mode; surfaces 23 known asymmetric `related:` links per drift-note 82 cohort for H.9.13 mass-fix; preserves 17-baseline). install.sh smoke 84/84 → 85/85 (+Test 88 with 5 fixtures: 3 HARD-block + 1 SOFT-advisory + 1 out-of-scope). Plugin manifest 1.14.1 → 1.15.0 (minor — decision-surface expansion = observable contract change per architect MEDIUM-2 + code-reviewer MEDIUM-CR5 convergent absorption).
