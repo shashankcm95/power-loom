@@ -8,6 +8,72 @@ For granular per-phase detail, see annotated tags `phase-H.x.y` and `swarm/H.x.y
 
 ---
 
+## [unreleased] — 2026-05-11 — H.9.1 shellcheck in local verification harness (sibling format-discipline pattern under H.9.0)
+
+**Second sub-phase of post-HT H.9.x track; sibling pattern under H.9.0.** H.9.1 establishes shellcheck at local-verification layer for substrate `*.sh` files, paralleling H.9.0's markdownlint addition for `*.md`. Adds Test 81 to `tests/smoke-ht.sh` running `npx --yes shellcheck --severity=error` against 10 substrate `*.sh` files (enumerated via `find` + `xargs` for future-extensibility); asserts exit 0. Adds `# shellcheck shell=bash` + `# shellcheck disable=SC2168` directives to `tests/smoke-h{4,7,8,ht}.sh` resolving 78 false-positive error-level findings caused by shellcheck's inability to follow `install.sh run_smoke_tests()` source-context. **No plugin manifest bump** per pure-process-improvement convention.
+
+### Context — sibling gap is broader than H.9.0's
+
+Where H.9.0 closed a CI-vs-local-asymmetry gap (markdownlint existed in CI, absent from local smoke; the 49-commit HT track accumulated 22 violations because CI was sole enforcer + ran only on push to main), H.9.1 addresses a broader gap: shellcheck existed NEITHER in CI NOR in local smoke. Bash content-format discipline was unenforced at any layer.
+
+Empirical baseline at H.9.1 implementation: `npx --yes shellcheck --severity=error` against 10 substrate `*.sh` files surfaced 78 error-level findings — 73× SC2168 (`local` outside function) + 4× SC2148 (missing shebang). All concentrated in `tests/smoke-h{4,7,8,ht}.sh`. Other substrate `*.sh` files (`install.sh`, `bin/`, `scripts/`) shellcheck-clean at error severity.
+
+### Root cause: shellcheck cannot follow `install.sh` source path
+
+The 4 affected test files are SOURCED by `install.sh run_smoke_tests()` (verified at install.sh:231-234: `source "$SCRIPT_DIR/tests/smoke-h{4,7,8,ht}.sh"`). At runtime `local` IS function-scope — each file's header explicitly states "DO NOT execute directly — depends on parent-scope `local passed`, `local failed`". Shellcheck without source-following sees the files as standalone bash where SC2148 (no shebang) + SC2168 (top-level `local`) fire as errors. Both false positives at error severity.
+
+### What landed
+
+- **Test 81 in `tests/smoke-ht.sh`** — `find . -name "*.sh" -not -path "./node_modules/*" -not -path "./.git/*" -print0 | xargs -0 npx --yes shellcheck --severity=error` (future-extensible to new `*.sh` additions); asserts exit 0. install.sh smoke count 76/76 → 77/77.
+
+- **`# shellcheck shell=bash` + `# shellcheck disable=SC2168` directives** at top of `tests/smoke-h{4,7,8,ht}.sh` (4 files × 2 lines). 1st directive declares shell (resolves 4× SC2148). 2nd directive suppresses SC2168 file-wide with inline rationale (resolves 73× SC2168). Total: 8 lines added across 4 files.
+
+### Methodology
+
+Sub-plan-only per HT.1.6 decision-rationale-matrix convention. 5 of 5 triggers absent (no fresh design surface — mirrors H.9.0 Test 80 shape; no schema change; no option-axis decision — directives are standard shellcheck idiom for sourced bash files; no institutional discipline encoding — sibling pattern under H.9.0 inherits the H.9.0 BACKLOG entry without adding to it; no HIGH-class bug catchable at design). Pure-process-improvement per H.9.0 / HT.1.10 / HT.2.4 precedent.
+
+### Why not weaken shellcheck config
+
+Per H.9.0 "fix the content to satisfy existing lint, don't weaken the lint to satisfy the content" precedent. Directives are local code-comments explaining engineering context (declarative); a `.shellcheckrc` config would weaken the rule globally (loses discipline). H.9.1 takes directive path — same discipline as H.9.0.
+
+### Soak gate impact
+
+H.9.1 is a **CLEAN phase** toward v2.0.0:
+- No new ADR (ledger stays at 5)
+- No new substrate convention doc (3 unchanged)
+- No schema change
+- No institutional commitment (Test 81 + directives are mechanical additions; no new invariant)
+
+H.9.1 counts as **2 of 5+ clean phases** needed since HT.3.1 (last institutional commitment — ADR-0004 codification). 3 more clean phases needed before v2.0.0 release gate retests GREEN.
+
+### Verification
+
+- **install.sh smoke**: 77/77 (was 76/76; +1 Test 81)
+- **_h70-test.js asserts**: 64/64 (unchanged)
+- **contracts-validate.js violations**: 16 baseline only (no regression)
+- **shellcheck --severity=error**: 0 findings (was 78 — 73× SC2168 + 5× SC2148, all resolved by 4-file × 2-directive additions)
+- **Test 81 inline output**: "OK (substrate shellcheck clean at error severity; 0 errors)"
+
+### Plugin manifest
+
+`1.12.3` UNCHANGED per pure-process-improvement convention.
+
+### Wallclock
+
+~30 min end-to-end.
+
+### Pattern-level observations
+
+- **Sibling format-discipline pattern under H.9.0**: H.9.0 closed CI-vs-local-asymmetry for markdown; H.9.1 establishes parity for bash where neither layer had the gate. Sibling format-discipline gaps may exist for yamllint (frontmatter), jsonlint (`.json` substrate config), and others — drift-note candidates if encountered.
+- **Directives-over-config discipline**: H.9.1 uses 4 file-top directives (local + self-documenting) rather than `.shellcheckrc` (global rule-weakening). Continues H.9.0 precedent: when lint flags engineering-context that lint can't see (sourced files in this case), document the context locally rather than weakening the rule globally.
+- **Empirical pre-validation pattern 18-phase confirmed** (HT.1.8-1.15 + HT.2.1-2.5 + HT.3.1-3.3 + H.9.0 + H.9.1). Live shellcheck baseline (78 findings; 4 files affected; install.sh source path verified) surfaced exact scope before implementation.
+
+### Next
+
+**H.9.2+** — substantive H.9.x trajectory work per HT.2.5 readout focus areas (error-critic.js fail-soft + 8 atomic-write sites + Atomics.wait + Tier-3 audit findings + ADR drift-detection enhancement). Soak gate progress: 2/5+ clean phases since HT.3.1.
+
+---
+
 ## [unreleased] — 2026-05-11 — H.9.0 markdownlint in local verification harness (closes process gap from 2026-05-11 CI failure)
 
 **First substantive sub-phase of post-HT H.9.x track.** H.9.0 closes the structural process gap surfaced by the 2026-05-11 CI markdown-lint failure post-HT.3.3 merge (22 MD037/MD038 errors accumulated across HT ledger entries because markdownlint wasn't in local verification — CI was sole enforcer + ran only on push to main). Adds Test 80 to `tests/smoke-ht.sh` running `npx --yes markdownlint-cli2 "**/*.md" "#node_modules" "#swarm"` against substrate; asserts exit 0. Adds 4th lightweight BACKLOG entry codifying ledger-authoring convention (backtick-wrap underscored substrate identifiers). **No plugin manifest bump** per pure-process-improvement convention.

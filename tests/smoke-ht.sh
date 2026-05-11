@@ -1,3 +1,5 @@
+# shellcheck shell=bash
+# shellcheck disable=SC2168  # H.9.1 — sourced by install.sh run_smoke_tests(); `local` is function-scope at runtime
 # tests/smoke-ht.sh — HT.1.x phase-era + H.8.7 trailer smoke tests.
 #
 # Sourced by install.sh run_smoke_tests() function; mutates parent-scope
@@ -331,6 +333,33 @@ EOF
   else
     echo "FAIL: markdownlint reported errors"
     echo "$T80_OUT" | tail -5
+    failed=$((failed + 1))
+  fi
+
+  # Test 81: H.9.1 — shellcheck error-severity in local smoke harness (closes the
+  # sibling format-discipline gap analogous to H.9.0 markdownlint; shellcheck was
+  # neither in CI nor local verification). False-positive SC2148 (missing shebang)
+  # + SC2168 (`local` outside function) fires on sourced test files resolved at
+  # H.9.1 by adding `# shellcheck shell=bash` + `# shellcheck disable=SC2168`
+  # directives at the top of `tests/smoke-h{4,7,8,ht}.sh` — those files are sourced
+  # by `install.sh run_smoke_tests()` so `local` IS function-scope at runtime; the
+  # directives declare shell + suppress the false positive shellcheck can't follow.
+  # Validates:
+  #   (a) shellcheck --severity=error runs against all substrate .sh files
+  #   (b) Exit code 0 — substrate shellcheck clean at error severity
+  # Approach: enumerate substrate .sh files via `find` (future-extensible to new
+  # `*.sh` additions), pipe to `xargs` → `npx --yes shellcheck --severity=error`.
+  # First-run on a fresh machine may take ~10-15s to download shellcheck binary
+  # into npx cache; subsequent runs are ~1-2s. Acceptable smoke-harness latency.
+  echo -n "  Test 81 (H.9.1 shellcheck error-severity in local smoke harness; npx shellcheck against substrate .sh files): "
+  T81_OUT=$(cd "$SCRIPT_DIR" && find . -name "*.sh" -not -path "./node_modules/*" -not -path "./.git/*" -print0 | xargs -0 npx --yes shellcheck --severity=error 2>&1)
+  T81_EXIT=$?
+  if [ $T81_EXIT -eq 0 ]; then
+    echo "OK (substrate shellcheck clean at error severity; 0 errors)"
+    passed=$((passed + 1))
+  else
+    echo "FAIL: shellcheck reported errors"
+    echo "$T81_OUT" | tail -5
     failed=$((failed + 1))
   fi
 

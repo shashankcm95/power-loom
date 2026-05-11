@@ -1,3 +1,5 @@
+# shellcheck shell=bash
+# shellcheck disable=SC2168  # H.9.1 — sourced by install.sh run_smoke_tests(); `local` is function-scope at runtime
 # tests/smoke-h4.sh — pre-H.x cohort + H.4.x phase-era smoke tests.
 #
 # Sourced by install.sh run_smoke_tests() function; mutates parent-scope
