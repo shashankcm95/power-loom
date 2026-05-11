@@ -99,7 +99,7 @@ function readHistory() {
     const raw = fs.readFileSync(HISTORY_PATH, 'utf8');
     return raw.split('\n').filter(Boolean).map((line, i) => {
       try { return JSON.parse(line); }
-      catch (e) { return { _malformed: true, _line: i + 1, _raw: line.slice(0, 200) }; }
+      catch { return { _malformed: true, _line: i + 1, _raw: line.slice(0, 200) }; }
     });
   } catch { return []; }
 }

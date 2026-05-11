@@ -30,7 +30,7 @@ const UNIX_PATH = /(?:\/[\w.-]+){2,}\.\w{1,10}/g;
 const WINDOWS_PATH = /[A-Za-z]:\\(?:[\w.-]+\\)+[\w.-]+\.\w{1,10}/g;
 // Quoted: ["'] capture-target ["'] — only matches the path between matched quotes
 // Path inside quotes can contain spaces.
-const QUOTED_PATH = /(?<=["'])(?:[\/]|[A-Za-z]:[\\\/])(?:[\w .-]+(?:[\/\\][\w .-]+)+)\.\w{1,10}(?=["'])/g;
+const QUOTED_PATH = /(?<=["'])(?:[/]|[A-Za-z]:[\\/])(?:[\w .-]+(?:[/\\][\w .-]+)+)\.\w{1,10}(?=["'])/g;
 
 /**
  * Extract file paths from arbitrary text. Returns a deduplicated Set so

@@ -195,7 +195,7 @@ function cmdRecord(args) {
   }
 }
 
-function cmdStats(args) {
+function cmdStats(_args) {
   const store = loadStore();
   const byPersona = {};
   const byIdentity = {};

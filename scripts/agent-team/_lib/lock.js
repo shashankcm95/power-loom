@@ -55,19 +55,22 @@ function acquireLock(lockPath, opts) {
         const pid = parseInt(fs.readFileSync(lockPath, 'utf8'), 10);
         if (Number.isNaN(pid) || !pid) {
           // Garbage in lock file → assume corrupt + reclaim
-          try { fs.unlinkSync(lockPath); } catch {}
+          try { fs.unlinkSync(lockPath); } catch { /* race: another process won the reclaim */ }
           continue;
         }
         if (pid === process.pid) {
           // Self-PID orphan from a prior incarnation — reclaim
-          try { fs.unlinkSync(lockPath); } catch {}
+          try { fs.unlinkSync(lockPath); } catch { /* race: another reclaim won */ }
           continue;
         }
         try { process.kill(pid, 0); } // throws if pid is gone
-        catch { try { fs.unlinkSync(lockPath); } catch {} continue; }
+        catch { try { fs.unlinkSync(lockPath); } catch { /* race: lock already reclaimed */ } continue; }
       } catch { /* lock disappeared between check and read */ }
       const end = Date.now() + sleepMs;
-      while (Date.now() < end) {} // brief busy-wait
+      // H.9.7: intentional busy-wait under tight ms budget (ADR-0006 invariant 3
+      // refactor-not-suppress for no-empty rule); JS lacks native sleep < ~10ms
+      // resolution short of using Atomics.wait (drift-note candidate H.9.10)
+      while (Date.now() < end) { /* spin */ }
     }
   }
   return false;

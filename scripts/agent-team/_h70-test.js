@@ -64,8 +64,8 @@ function setupTmpStore(initialIdentities = {}) {
 }
 
 function cleanupTmpStore() {
-  try { fs.unlinkSync(TMP_STORE); } catch {}
-  try { fs.unlinkSync(TMP_LOCK); } catch {}
+  try { fs.unlinkSync(TMP_STORE); } catch { /* cleanup: file may not exist on fresh runs */ }
+  try { fs.unlinkSync(TMP_LOCK); } catch { /* cleanup: file may not exist on fresh runs */ }
 }
 
 // ===== Section 1: bucketTaskComplexity unit tests =====
@@ -244,7 +244,7 @@ function runBreed(args, identities) {
   let parsed = null;
   try {
     parsed = JSON.parse(result.stdout);
-  } catch {}
+  } catch { /* non-JSON stdout returned as null for caller to handle */ }
   return { parsed, stderr: result.stderr, status: result.status };
 }
 
@@ -387,7 +387,7 @@ function runRecVerif(args, identities) {
   let parsed = null;
   try {
     parsed = JSON.parse(result.stdout);
-  } catch {}
+  } catch { /* non-JSON stdout returned as null for caller to handle */ }
   return { parsed, stderr: result.stderr, status: result.status };
 }
 
@@ -756,7 +756,7 @@ assert(
   'HT.2.3 Part A: lockfile parent dir exists after acquireLock (auto-mkdir confirmed)'
 );
 lockLib.releaseLock(lockTest1Path);
-try { fs.rmSync(lockTest1Dir, { recursive: true, force: true }); } catch {}
+try { fs.rmSync(lockTest1Dir, { recursive: true, force: true }); } catch { /* cleanup: fixture dir may not exist if test errored early */ }
 
 // Test 2: acquireLock + releaseLock round-trip against pre-existing tmpdir (Part B drop-in)
 const lockTest2Dir = path.join(os.tmpdir(), `ht23-lock-test-2-${process.pid}`);
@@ -776,7 +776,7 @@ assert(
   !fs.existsSync(lockTest2Path),
   'HT.2.3 Part B drop-in: lockfile removed after releaseLock (idempotent unlink)'
 );
-try { fs.rmSync(lockTest2Dir, { recursive: true, force: true }); } catch {}
+try { fs.rmSync(lockTest2Dir, { recursive: true, force: true }); } catch { /* cleanup: fixture dir may not exist if test errored early */ }
 
 // Test 3: acquireLock returns false on timeout against held-by-live-child-PID (fail-soft contract)
 // NOTE: must use a CHILD process PID (not PID 1 / launchd) because process.kill(1, 0) from a
@@ -801,8 +801,8 @@ assert(
   lockTest3Elapsed >= 100 && lockTest3Elapsed < 500,
   `HT.2.3 fail-soft contract: timeout respects maxWaitMs (got ${lockTest3Elapsed}ms; expected 100-500ms)`
 );
-try { fs.unlinkSync(lockTest3Path); } catch {}
-try { fs.rmSync(lockTest3Dir, { recursive: true, force: true }); } catch {}
+try { fs.unlinkSync(lockTest3Path); } catch { /* cleanup: lockfile may not exist if test errored early */ }
+try { fs.rmSync(lockTest3Dir, { recursive: true, force: true }); } catch { /* cleanup: fixture dir may not exist */ }
 
 // Test 4: withLock regression — Part A's auto-mkdir doesn't break existing substrate-script consumers
 const lockTest4Dir = path.join(os.tmpdir(), `ht23-lock-test-4-${process.pid}`, 'auto-created-by-withLock');
@@ -816,7 +816,7 @@ assert(
   withLockFnRan && withLockReturn === 'withLock-returned-value',
   'HT.2.3 regression: withLock still works for substrate-script consumers (auto-mkdir transparent)'
 );
-try { fs.rmSync(path.dirname(lockTest4Dir), { recursive: true, force: true }); } catch {}
+try { fs.rmSync(path.dirname(lockTest4Dir), { recursive: true, force: true }); } catch { /* cleanup: fixture dir may not exist if test errored early */ }
 
 // ===== Summary =====
 

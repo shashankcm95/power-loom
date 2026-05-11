@@ -465,6 +465,59 @@ EOF
     rm -rf "$T83_TMPDIR"
   fi
 
+  # Test 84: H.9.7 — ESLint v9 + eslint:recommended on substrate .js files
+  # (sibling format-discipline 5th application; closes JavaScript content-
+  # format-time discipline gap analogous to H.9.0 markdownlint + H.9.1
+  # (shellcheck) + H.9.2 jq + H.9.5 yaml-lint). Substrate has 53 .js files;
+  # H.9.7 baseline surfaced 44 errors (HT.1.2 stale-`parsed` real bugs in
+  # contract-verifier.js + 13 no-empty + 21 no-unused-vars + 4 no-useless-
+  # escape + 4 legitimate-security regex sites); all 44 fixed.
+  # eslint.config.js inline-rolls eslint:recommended (60 rules) per Option B
+  # (zero-runtime-dep substrate convention preserved); ADR-0006 invariant 4
+  # commits to manual sync at ESLint major-version bumps.
+  # H.9.6.2 safe-pattern: T84_EXIT=0; T84_OUT=$(...) || T84_EXIT=$?
+  echo -n "  Test 84 (H.9.7 ESLint v9 + eslint:recommended on substrate .js): "
+  T84_EXIT=0
+  T84_OUT=$(cd "$SCRIPT_DIR" && npx --yes eslint@9 . 2>&1) || T84_EXIT=$?
+  if [ $T84_EXIT -eq 0 ]; then
+    echo "OK (substrate JavaScript ESLint clean at error severity; 0 errors)"
+    passed=$((passed + 1))
+  else
+    echo "FAIL: ESLint reported errors (exit $T84_EXIT)"
+    echo "$T84_OUT" | head -30
+    failed=$((failed + 1))
+  fi
+
+  # Test 84b: H.9.7 — ADR-0006 invariant 5 enforcement (suppression-detection).
+  # ADR-0006 invariant 2 prohibits `eslint-disable` directives (any variant) in
+  # substrate `.js` files. Without active smoke-time enforcement, the prohibition
+  # would rely on code-review discipline alone (~5-commit drift risk per code-
+  # reviewer FLAG-3 estimate at H.9.7 pre-approval gate). Test 84b greps for
+  # actual disable-DIRECTIVES (comment-form `//` or `/*` prefix immediately before
+  # `eslint-disable`), NOT raw substring matches. This precision handles two
+  # legitimate cases that contain the literal string but are NOT suppressions:
+  # (a) `hooks/scripts/console-log-check.js` regex literals `\/\/\s*eslint-disable`
+  #     — escaped slashes don't match comment-form pattern;
+  # (b) `eslint.config.js` documentation comments describing the rule itself
+  #     — explicitly excluded from grep scope (the config IS where the discipline
+  #     lives; mentioning it in comments is meta, not directive use).
+  # grep exit codes: 0 = matches found (BAD); 1 = no matches (GOOD); >1 = error.
+  echo -n "  Test 84b (H.9.7 ADR-0006 invariant 5 suppression-detection in substrate .js): "
+  T84B_EXIT=0
+  T84B_OUT=$(cd "$SCRIPT_DIR" && grep -rlE '(//|/\*)[ \t]*eslint-disable' . --include="*.js" --exclude-dir=node_modules --exclude-dir=.git --exclude="eslint.config.js" 2>&1) || T84B_EXIT=$?
+  if [ $T84B_EXIT -eq 1 ]; then
+    echo "OK (0 eslint-disable suppressions in substrate .js per ADR-0006 invariant 2)"
+    passed=$((passed + 1))
+  elif [ $T84B_EXIT -eq 0 ]; then
+    echo "FAIL: eslint-disable suppressions found (ADR-0006 invariant 2 violated):"
+    echo "$T84B_OUT" | head -10
+    failed=$((failed + 1))
+  else
+    echo "FAIL: grep exited with unexpected code $T84B_EXIT"
+    echo "$T84B_OUT" | head -5
+    failed=$((failed + 1))
+  fi
+
   # Test 65: H.8.7 — adr.js symlink defense (chaos M3)
   echo -n "  Test 65 (H.8.7 adr.js symlink defense; symlink in ADRS_DIR ignored): "
   T65_TMPDIR=$(mktemp -d)

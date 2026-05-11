@@ -119,7 +119,7 @@ function classifyConfidence(n, r) {
 // Theory weights are in the range [-0.05, 0.15]; we scale empirical slope so its
 // magnitude is comparable. This is a heuristic: divide by axis-value-stddev so the
 // result is a "weight per stddev" — comparable across axes regardless of their units.
-function normalizeToWeightScale(slope, axisStdDev, theoryWeightSign) {
+function normalizeToWeightScale(slope, axisStdDev, _theoryWeightSign) {
   if (slope === null || axisStdDev === 0) return null;
   // Empirical effect per stddev of input
   const perStddev = slope * axisStdDev;

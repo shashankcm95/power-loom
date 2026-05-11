@@ -52,7 +52,7 @@ const logger = log('validate-plan-schema');
 
 // Path matcher: `~/.claude/plans/*.md` or `.claude/plans/*.md` (project-relative).
 // Uses non-capturing group with anchor at start-of-string OR slash boundary.
-const PLAN_PATH_RE = /(?:^|\/)\.claude\/plans\/[^\/]+\.md$/;
+const PLAN_PATH_RE = /(?:^|\/)\.claude\/plans\/[^/]+\.md$/;
 
 // H.7.15 (drift-note 12) — custom plan path support via CLAUDE_PLAN_DIR env var.
 // When set, files under that directory ALSO trigger plan-schema validation

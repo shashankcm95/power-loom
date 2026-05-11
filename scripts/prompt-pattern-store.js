@@ -72,12 +72,36 @@ function saveStore(store) {
 
 // Normalize prompts for fuzzy comparison.
 // Phase-F6: Unicode-normalize and strip zero-width/control chars to
-// prevent dedup bypass via lookalike characters (fix the auth vs
-// f​ix the auth).
+// prevent dedup bypass via lookalike characters (e.g., the literal string
+// "fix the auth" vs the visually-identical "fix" + zero-width-space +
+// "ix the auth" string — both render the same in most editors but hash
+// differently without normalization).
+//
+// H.9.7 refactor (per ADR-0006 invariant 3 refactor-not-suppress + code-
+// reviewer FLAG-2 explicit-range-form requirement): the original code
+// embedded literal zero-width + control chars inside the regex source,
+// which triggered ESLint `no-irregular-whitespace` + `no-control-regex`.
+// Rebuilt via `new RegExp` with `\u` and `\x` escape sequences in a
+// single string-constructed character class (range form preserved; not
+// individual-char enumeration). String constants are compile-time const
+// per ADR-0006 invariant 3 — never derived from external input.
+// Allocated at module scope (once per process); no per-call cost.
+const NORMALIZE_STRIP = new RegExp(
+  '[' +
+  '\\u200B-\\u200F' +  // zero-width space through right-to-left mark
+  '\\u2060' +          // word joiner
+  '\\uFEFF' +          // BOM / zero-width no-break space
+  '\\x00-\\x08' +      // C0 controls (excludes \t=\x09, \n=\x0A, \v=\x0B, \f=\x0C, \r=\x0D)
+  '\\x0E-\\x1F' +      // shift-in through unit separator
+  '\\x7F' +            // DEL
+  ']',
+  'g'
+);
+
 function normalize(prompt) {
   return prompt
     .normalize('NFKC')                              // canonical decomposition + compatibility
-    .replace(/[​-‏⁠﻿\x00-\x08\x0E-\x1F\x7F]/g, '')  // zero-width + control chars
+    .replace(NORMALIZE_STRIP, '')                   // zero-width + control chars
     .toLowerCase()
     .trim()
     .replace(/\s+/g, ' ')

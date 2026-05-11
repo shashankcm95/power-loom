@@ -134,18 +134,6 @@ function truncateError(error) {
   return error.slice(0, MAX_ERROR_BYTES) + '\n[...truncated]';
 }
 
-/**
- * Atomic append to a file (matches the toolkit's atomic-write pattern).
- *
- * @param {string} filePath Target file
- * @param {string} content Content to append
- */
-function atomicAppend(filePath, content) {
-  // Append-only is naturally atomic on POSIX for single writes < PIPE_BUF.
-  // For larger writes we use the standard appendFileSync which the OS
-  // serializes via the file descriptor lock.
-  fs.appendFileSync(filePath, content);
-}
 
 /**
  * Build the [FAILURE-REPEATED] forcing instruction. Mirrors the shape of

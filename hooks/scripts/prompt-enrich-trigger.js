@@ -20,9 +20,6 @@
 // patterns/validator-conventions.md). Catalog: skills/agent-team/patterns/
 // forcing-instruction-family.md.
 
-const fs = require('fs');
-const path = require('path');
-const os = require('os');
 const { log: makeLogger } = require('./_log.js');
 const log = makeLogger('prompt-enrich-trigger');
 

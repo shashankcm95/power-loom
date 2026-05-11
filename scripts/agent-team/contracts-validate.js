@@ -77,7 +77,7 @@ function listContractFiles() {
 
 function loadJson(p) {
   try { return JSON.parse(fs.readFileSync(p, 'utf8')); }
-  catch (e) { return null; }
+  catch { return null; }
 }
 
 // Parse a markdown table column matching `[Pattern Name](path)` and a status column.

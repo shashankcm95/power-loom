@@ -20,7 +20,6 @@ const path = require('path');
 // the canonical shape; semantically identical for documentary outputs.
 // HT.0.9-verify code-reviewer enumerated the 4 sites.
 const { parseFrontmatter } = require('./_lib/frontmatter');
-const { spawnSync } = require('child_process');
 
 function parseArgs(argv) {
   const args = {};
@@ -211,9 +210,17 @@ function jaccard(a, b) {
 // other Object.prototype member) cannot resolve to the inherited method, which
 // would otherwise return a truthy function and force-pass every check.
 const functionalChecks = Object.assign(Object.create(null), {
-  outputContainsFrontmatter: () => parsed !== null,
+  // H.9.7 fix (code-reviewer FLAG-1 HIGH): HT.1.2 refactor eliminated the
+  // `parsed` variable in favor of `{frontmatter, body}` destructuring at
+  // line 54 (parseFrontmatter always returns an object — empty when no
+  // frontmatter, per `_lib/frontmatter.js` docstring). These two closures
+  // retained stale `parsed` references that would throw ReferenceError
+  // at runtime whenever F1/F2 fire — dormant across ALL 18 substrate
+  // contracts (every contract declares F1+F2 required:true). ESLint v9
+  // no-undef caught at H.9.7 baseline; ADR-0006 invariant 1 fix.
+  outputContainsFrontmatter: () => Object.keys(frontmatter).length > 0,
   frontmatterHasFields: (cArgs) => {
-    if (!parsed) return false;
+    if (Object.keys(frontmatter).length === 0) return false;
     return cArgs.fields.every((f) => frontmatter[f] !== undefined);
   },
   minFindings: (cArgs) => countFindings(body) >= cArgs.min,

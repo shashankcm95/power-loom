@@ -21,7 +21,6 @@
 const fs = require('fs');
 const path = require('path');
 const os = require('os');
-const { spawnSync } = require('child_process');
 const { log } = require('./_log.js');
 const logger = log('session-self-improve-prompt');
 // HT.audit-followup H4: writeAtomic migrated to `_lib/atomic-write.js` shared
@@ -32,18 +31,6 @@ const { writeAtomic } = require('../../scripts/agent-team/_lib/atomic-write');
 
 const SESSION_ID = process.env.CLAUDE_SESSION_ID || process.env.CLAUDE_CONVERSATION_ID || String(process.ppid || 'default');
 const PENDING_PATH = path.join(os.homedir(), '.claude', 'checkpoints', 'self-improve-pending.json');
-
-function resolveSelfImproveScript() {
-  const candidates = [
-    path.join(__dirname, '..', '..', 'scripts', 'self-improve-store.js'),
-    path.join(__dirname, '..', 'scripts', 'self-improve-store.js'),
-    path.join(os.homedir(), '.claude', 'scripts', 'self-improve-store.js'),
-  ];
-  for (const c of candidates) {
-    try { fs.accessSync(c, fs.constants.F_OK); return c; } catch { /* next */ }
-  }
-  return null;
-}
 
 function loadPending() {
   try { return JSON.parse(fs.readFileSync(PENDING_PATH, 'utf8')); }

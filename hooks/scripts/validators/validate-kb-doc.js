@@ -30,13 +30,10 @@
 'use strict';
 
 const fs = require('fs');
-const path = require('path');
 const { log } = require('../_log.js');
 const logger = log('validate-kb-doc');
 
-const { findToolkitRoot } = require('../../../scripts/agent-team/_lib/toolkit-root.js');
 const { parseFrontmatter } = require('../../../scripts/agent-team/_lib/frontmatter.js');
-const TOOLKIT_ROOT = findToolkitRoot();
 
 // kb/architecture/**.md is the discipline-enforced surface (where the
 // 3-tier authoring rules apply, per swarm/kb-architecture-planning/_PRINCIPLES.md).
