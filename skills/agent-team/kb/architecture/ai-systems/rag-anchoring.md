@@ -15,6 +15,9 @@ sources_consulted:
 related:
   - architecture/crosscut/single-responsibility
   - architecture/crosscut/dependency-rule
+  - architecture/ai-systems/agent-design
+  - architecture/ai-systems/evaluation-under-nondeterminism
+  - architecture/ai-systems/inference-cost-management
 status: active+enforced
 ---
 
@@ -407,14 +410,6 @@ Substrate examples cite:
 - The substrate's own kb-resolver implementation (H.2-bridge.2)
 - Drift-note 47 (forcing-instruction shared helper extraction context)
 - The specific architecture of `_routing.md` (planned per H.x kb-architecture-planning)
-
-## Related KB docs (planned, not yet authored)
-
-Forward references — these `kb_id` targets are deferred-author-intent (planned but not authored). When authored, references should migrate back into frontmatter `related:` per the bidirectional graph convention. Per HT.1.12 deferred-author-intent shape (`react-essentials.md` precedent).
-
-- `kb:architecture/ai-systems/agent-design` — multi-step agent architectures, planning, tool-use loops
-- `kb:architecture/ai-systems/evaluation-under-nondeterminism` — evaluation discipline for non-deterministic AI systems
-- `kb:architecture/ai-systems/inference-cost-management` — cost-aware inference budgeting + adaptive routing
 
 ## Phase
 

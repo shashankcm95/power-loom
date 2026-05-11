@@ -2831,9 +2831,11 @@ Useful signal for "is the HETS substrate being used or just sitting there?" — 
 
 **Estimate**: ~1 hr.
 
-### HT.1.12-followup — Author 5 planned KB targets (deferred-author-intent → authoring queue)
+### HT.1.12-followup — Author 5 planned KB targets (deferred-author-intent → authoring queue) — SHIPPED H.9.3
 
-**Status**: HT.1.12 (shipped 2026-05-10) annotated 7 broken `related:` refs across 5 architecture KBs with inline `# planned — not yet authored` comments per deferred-author-intent shape (chosen over body-section migration to preserve graph-walk semantics for any future bidirectional validator extension). The 5 target KBs remain unauthored. Bidirectional `related:` validator at `contracts-validate.js:187` skips broken refs silently when targets don't exist — no active enforcement surface for authoring follow-through.
+**Status**: SHIPPED 2026-05-11 at H.9.3 (KB authoring batch). All 5 planned KB targets authored at substantive depth (~280-330 LoC each; total 1474 LoC of architectural content); planned-refs migrated from `## Related KB docs (planned, not yet authored)` body sections in 5 source KBs into frontmatter `related:` arrays (bidirectional graph convention restored). Bidirectional `related:` validator at `contracts-validate.js:187` no longer silent on these refs — all 5 target `kb_id`s now exist + are surfaced by the graph walk.
+
+**Original status** (preserved for audit): HT.1.12 (shipped 2026-05-10) annotated 7 broken `related:` refs across 5 architecture KBs in `## Related KB docs (planned, not yet authored)` body sections per deferred-author-intent shape (chosen over inline frontmatter annotation to preserve graph-walk semantics for any future bidirectional validator extension). The 5 target KBs remained unauthored until H.9.3.
 
 **Scope**: Author the 5 planned KB targets per HT.1.12 plan annotations:
 

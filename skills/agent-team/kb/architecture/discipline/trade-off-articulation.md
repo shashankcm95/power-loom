@@ -17,6 +17,7 @@ related:
   - architecture/discipline/reliability-scalability-maintainability
   - architecture/crosscut/dependency-rule
   - architecture/crosscut/single-responsibility
+  - architecture/discipline/refusal-patterns
 status: active+enforced
 ---
 
@@ -414,12 +415,6 @@ Authored by multi-source synthesis of:
 5. **Designing Data-Intensive Applications** (Kleppmann, 2017), ch 1. The R/S/M (reliability / scalability / maintainability) framing is the most concentrated articulation of orthogonal architectural concerns.
 
 Substrate examples cite drift-notes from H.7.22 (Principle Audit codification), H.7.25 (Convention G failure modes), H.7.26-H.7.27 (consolidation trade-offs), drift-note 21 / 47 / 56 (captured trade-offs deferred for resolution), and the Pre-Approval Verification process empirically validated across 4 phases.
-
-## Related KB docs (planned, not yet authored)
-
-Forward references — these `kb_id` targets are deferred-author-intent (planned but not authored). When authored, references should migrate back into frontmatter `related:` per the bidirectional graph convention. Per HT.1.12 deferred-author-intent shape (`react-essentials.md` precedent).
-
-- `kb:architecture/discipline/refusal-patterns` — refusal patterns as the principled-rejection complement to articulated-trade-off discipline
 
 ## Phase
 

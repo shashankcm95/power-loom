@@ -18,6 +18,7 @@ related:
   - architecture/crosscut/single-responsibility
   - architecture/crosscut/deep-modules
   - architecture/crosscut/acyclic-dependencies
+  - architecture/crosscut/information-hiding
 status: active+enforced
 ---
 
@@ -535,12 +536,6 @@ Authored by multi-source synthesis of:
 5. **Designing Data-Intensive Applications** (Martin Kleppmann, 2017), ch 4 (Encoding/Evolution). Backward/forward compatibility as a runtime form of dependency-direction concern (older code as the stable abstraction).
 
 Substrate examples cite drift-notes from H.7.14 (`_lib/toolkit-root.js` extraction), H.7.22 (kernel/userspace framing), H.7.10 (`lock.js` RMW-race fix), and the broader proto-OS positioning established post-H.7.27.
-
-## Related KB docs (planned, not yet authored)
-
-Forward references — these `kb_id` targets are deferred-author-intent (planned but not authored). When authored, references should migrate back into frontmatter `related:` per the bidirectional graph convention. Per HT.1.12 deferred-author-intent shape (`react-essentials.md` precedent).
-
-- `kb:architecture/crosscut/information-hiding` — information-hiding as the abstraction-leakage control complementary to dependency-direction
 
 ## Phase
 

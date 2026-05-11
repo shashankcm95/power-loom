@@ -8,6 +8,92 @@ For granular per-phase detail, see annotated tags `phase-H.x.y` and `swarm/H.x.y
 
 ---
 
+## [unreleased] — 2026-05-11 — H.9.3 KB authoring batch (5 planned KB targets) — closes HT.1.12-followup docs-pass-incomplete gap
+
+**Fourth sub-phase of post-HT H.9.x track; substantive pure-doc batch authoring.** H.9.3 closes the user-visible docs-pass-incomplete gap surfaced at H.9.1 retrospective + promoted to BACKLOG.md HT.1.12-followup entry at H.9.2. Authors all 5 planned architecture KB targets at substantive depth (~280-330 LoC each; total 1474 LoC of new architectural content); migrates planned-refs from `## Related KB docs (planned, not yet authored)` body sections in 5 source KBs into frontmatter `related:` arrays (bidirectional graph convention restored). Substrate's `contracts-validate.js` bidirectional `related:` validator no longer silent on these refs — all 5 target `kb_id`s now exist + surfaced by graph walk. **No plugin manifest bump** per pure-doc convention.
+
+### Context — HT.1.12-followup closure
+
+HT.1.12 (shipped 2026-05-10) annotated 7 broken `related:` refs across 5 architecture KBs as deferred-author-intent body-section listings (per option (a) of HT.1.12 annotation approach decision). The 5 target KBs remained unauthored. H.9.1 retrospective surfaced this as user-visible docs-pass-incomplete. H.9.2 promoted to BACKLOG.md HT.1.12-followup deferred-work entry. H.9.3 authors all 5 + executes the migration.
+
+### What landed — 5 new KBs
+
+| # | KB | LoC | Sources |
+|---|----|-----|---------|
+| 1 | `architecture/crosscut/information-hiding` | 273 | Parnas (CACM 1972) + Ousterhout (PoSD ch 5) + Martin (Clean Architecture ch 5) + Pragmatic Programmer |
+| 2 | `architecture/discipline/refusal-patterns` | 281 | Bai et al (Constitutional AI, arXiv:2212.08073) + Anthropic Claude docs + AI Engineering (Huyen ch 4+7) + State of GPT (Karpathy) |
+| 3 | `architecture/ai-systems/agent-design` | 326 | Yao (ReAct, arXiv:2210.03629) + Schick (Toolformer, arXiv:2302.04761) + AI Engineering (Huyen ch 6) + State of GPT (Karpathy) + Anthropic Building Effective Agents |
+| 4 | `architecture/ai-systems/evaluation-under-nondeterminism` | 316 | AI Engineering (Huyen ch 4) + DMLS (Huyen ch 6+8) + State of GPT (Karpathy) + Anthropic research + HELM (Liang arXiv:2211.09110) |
+| 5 | `architecture/ai-systems/inference-cost-management` | 278 | AI Engineering (Huyen ch 5+6+8) + Anthropic API docs (prompt caching, batches) + OpenAI Cookbook + State of GPT (Karpathy) |
+| **Total** | | **1474** | |
+
+Each KB follows the existing architecture-KB template: frontmatter (kb_id + version + tags + sources_consulted + related + status) + Summary + Quick Reference + Intent + topic-specific deep sections + Apply when + Substrate applications + Tensions + History + Phase. Depth bar matched to lower end of existing architecture KBs (357-547 LoC range; H.9.3 batch sized at ~280-330 each for tractable single-phase ship).
+
+### What landed — 5 source-KB migrations
+
+| Source KB | Refs added to frontmatter `related:` | Planned section removed |
+|-----------|--------------------------------------|--------------------------|
+| `rag-anchoring.md` | `agent-design` + `evaluation-under-nondeterminism` + `inference-cost-management` | yes (3 refs) |
+| `deep-modules.md` | `information-hiding` | yes (1 ref) |
+| `dependency-rule.md` | `information-hiding` | yes (1 ref) |
+| `error-handling-discipline.md` | `refusal-patterns` | yes (1 ref) |
+| `trade-off-articulation.md` | `refusal-patterns` | yes (1 ref) |
+
+Bidirectional `related:` graph fully restored. The substrate's pre-existing bidirectional validator at `contracts-validate.js:187` picks up the new refs cleanly (no regression; still 16-baseline).
+
+### What landed — BACKLOG.md status flip
+
+HT.1.12-followup BACKLOG entry flipped `Status: HT.1.12 ... target KBs remain unauthored` → `Status: SHIPPED 2026-05-11 at H.9.3 ... all 5 planned KB targets authored at substantive depth`. Original status preserved as audit trail.
+
+### Methodology
+
+Sub-plan-only per HT.1.6 decision-rationale-matrix + HT.1.10/HT.1.12/HT.2.4 pure-doc precedent. 5 of 5 triggers absent (no fresh design surface — existing kb-authoring-batch template; no schema change; no option-axis decision; no institutional discipline encoding — bidirectional `related:` convention pre-exists H.9.3; no HIGH-class bug catchable at design — pure-doc work). Per-phase pre-approval gate skipped with EXPLICIT decision rationale matrix per HT.1.6 convention.
+
+### Substantive-vs-clean distinction
+
+H.9.3 is *substantive* (1474 LoC of new architectural content) but *clean* (no schema/ADR/convention change). Soak gate criteria distinguish institutional impact (which gates v2.0.0) from authoring volume (which doesn't). Pure-doc batches at HT.1.12 (forward-refs annotated) + historical kb-authoring batches 1-4 (rag-anchoring, deep-modules, etc.) follow the same pattern.
+
+### Soak gate impact
+
+H.9.3 is a **CLEAN phase** toward v2.0.0:
+- No new ADR (ledger stays at 5)
+- No new substrate convention doc
+- No schema change
+- No institutional commitment (KB content is reference material; bidirectional `related:` graph restoration is convention-preserving, not convention-new)
+
+H.9.3 counts as **4 of 5+ clean phases** needed since HT.3.1 (last institutional commitment — ADR-0004 codification). 1 more clean phase needed before v2.0.0 release gate retests GREEN.
+
+### Verification
+
+- **install.sh smoke**: 78/78 (unchanged from H.9.2; H.9.3 adds no new tests)
+- **_h70-test.js asserts**: 64/64 (unchanged)
+- **contracts-validate.js violations**: 16 baseline only (no regression; bidirectional `related:` validator picks up 5 new refs cleanly)
+- **markdownlint**: 0 errors (Test 80 passing; all 15 architecture KBs lint-clean)
+- **shellcheck --severity=error**: 0 errors (Test 81 passing)
+- **JSON syntax (jq empty)**: 0 errors across 30 substrate JSON files (Test 82 passing)
+- **`## Related KB docs (planned)` annotations**: 0 remaining in `skills/agent-team/kb/` tree
+
+### Plugin manifest
+
+`1.12.3` UNCHANGED per pure-doc convention.
+
+### Wallclock
+
+~120-150 min end-to-end (5 KBs × ~25 min each + 5 source-KB migrations + BACKLOG update + ledger).
+
+### Pattern-level observations
+
+- **Substantive-but-clean phase shape**: H.9.3 demonstrates that pure-doc batch authoring can be substantive (1474 LoC) yet count as a clean soak-gate phase. The criteria distinguish institutional impact from content volume.
+- **HT.1.12 migration discipline applied**: per HT.1.12 plan rule ("when a planned KB is authored, references migrate from body-section listing INTO frontmatter `related:` array"), H.9.3 executes the migration for all 5 source KBs. Discipline-in-prose → discipline-in-practice; the substrate enforces its own conventions through phase work.
+- **KB authoring batch 5** (post-batch-4 in prior phase work): batches 1-4 ran post-H.7.27 as soak-track work; H.9.3 is the post-HT batch 5. The pattern is established; the batch shape is reproducible.
+- **Empirical pre-validation pattern 20-phase confirmed** (HT.1.8-1.15 + HT.2.1-2.5 + HT.3.1-3.3 + H.9.0 + H.9.1 + H.9.2 + H.9.3). HT.1.12 source-KB structure verified live before authoring; per-KB ref enumeration confirmed; bidirectional graph convention validated.
+
+### Next
+
+**H.9.4+** — sibling format-discipline 4th candidate (yamllint on frontmatter / ESLint baseline on `.js` substrate) OR substantive H.9.x trajectory work per HT.2.5 readout focus areas. With H.9.3 = 4/5+ clean phases, **1 more clean phase lands the v2.0.0 soak gate**. Cleanest candidate: sibling format-discipline (yamllint or jsonlint complement). Soak gate progress: 4/5+ clean phases since HT.3.1.
+
+---
+
 ## [unreleased] — 2026-05-11 — H.9.2 JSON syntax in local verification harness (sibling format-discipline 3rd application under H.9.0 + H.9.1)
 
 **Third sub-phase of post-HT H.9.x track; sibling format-discipline 3rd application.** H.9.2 establishes substrate-wide JSON syntax gate at local-verification layer for substrate `*.json` files, paralleling H.9.0's markdownlint addition for `*.md` and H.9.1's shellcheck addition for `*.sh`. Adds Test 82 to `tests/smoke-ht.sh` running `find . -name "*.json" -not -path "./node_modules/*" -not -path "./.git/*" -not -path "./swarm/run-state/*" -print0 | xargs -0 -n1 jq empty` against 30 substrate-active `.json` files; asserts exit 0. install.sh smoke 77/77 → 78/78. Adds BACKLOG.md `HT.1.12-followup` deferred-work entry tracking 5 unauthored planned KB targets (`agent-design`, `evaluation-under-nondeterminism`, `inference-cost-management`, `information-hiding`, `refusal-patterns`). **No plugin manifest bump** per pure-process-improvement convention.
