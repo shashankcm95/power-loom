@@ -67,6 +67,17 @@
         ]
       },
       {
+        "_comment": "H.9.11: ordered FIRST among content-validators (after config-guard security gate); structural-before-semantic ordering. validate-yaml-frontmatter detects duplicate top-level YAML keys at Edit/Write time on HT-state.md; closes drift-note 80 URGENT 5-recurrence escalation.",
+        "matcher": "Edit|Write",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node ${CLAUDE_PLUGIN_ROOT}/hooks/scripts/validators/validate-yaml-frontmatter.js",
+            "timeout": 5
+          }
+        ]
+      },
+      {
         "matcher": "Edit|Write",
         "hooks": [
           {

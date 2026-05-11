@@ -8,6 +8,74 @@ For granular per-phase detail, see annotated tags `phase-H.x.y` and `swarm/H.x.y
 
 ---
 
+## [unreleased] — 2026-05-12 — H.9.11 PreToolUse YAML frontmatter validator (MANDATORY-gate; closes drift-note 80 URGENT 5-recurrence escalation + drift-note 78(b) ledger-write convention enforcement gap)
+
+**Twelfth sub-phase of post-HT H.9.x track; MANDATORY-gate phase per ADR-0002 substrate-fundament (hook subsystem touching) + ADR-0001 invariants (new PreToolUse deny-decision authority); user-directed re-sequencing H.9.11-before-H.9.10 per drift-note 80 URGENT urgency.** Adds NEW PreToolUse:Edit|Write validator `hooks/scripts/validators/validate-yaml-frontmatter.js` (~215 LoC; pure-Node line-scan parser; zero-runtime-dep per ADR-0006 invariant 4) that detects duplicate top-level YAML keys in HT-state.md frontmatter at Edit/Write time. Two-layer defense with Test 83 yaml-lint at install.sh smoke. install.sh smoke 82/82 → 83/83 (+Test 86). Plugin manifest 1.13.1 → 1.14.0 minor bump per architect MEDIUM-5 absorption (new PreToolUse hook = observable contract addition).
+
+### What landed
+
+- **`hooks/scripts/validators/validate-yaml-frontmatter.js`** NEW (~215 LoC): PreToolUse:Edit|Write validator; path-scoped to HT-state.md via `REQUIRES_DUP_KEY_CHECK` regex array; ADR-amendment governance for future entries (architect MEDIUM-1 + LOW-3 absorption); pure-Node line-scan detector (skip-indented per architect HIGH-1; `^([a-zA-Z_][a-zA-Z0-9_]*):` regex per code-reviewer regex-correctness verdict); `applyEdit` helper handles `replace_all: true` via split+join + sanitizes `$`-patterns via `.replace(/\$/g, '$$$$')` (architect HIGH-2 + code-reviewer MEDIUM-CR3 convergent absorption); MultiEdit `Array.isArray(toolInput.edits)` log + approve (architect HIGH-2 out-of-scope deferral); frontmatter-missing block for in-scope paths (architect MEDIUM-4 absorption); fail-soft contract envelope per ADR-0001 invariant 2
+- **`hooks/hooks.json`** registration: validator inserted as FIRST entry after config-guard in PreToolUse:Edit|Write block (architect MEDIUM-2 structural-before-semantic ordering)
+- **`tests/smoke-ht.sh` Test 86**: fault-injects synthetic HT-state.md with duplicate `last_session_phase_priors:` key; pipes both Write- and Edit-event JSON to validator; asserts both block (drift-note 80 root cause is Edit pattern, not Write); uses Node JSON.stringify for event-payload encoding (architect HIGH-3 absorption); lowercase `passed`/`failed` counters matching Test 85 precedent (code-reviewer HIGH-CR1 LIVE BUG absorption); `trap - EXIT` reset after manual cleanup (code-reviewer MEDIUM-CR2 trap hygiene absorption)
+- **drift-note 80 + 78(b) CLOSED**: validator catches recurring cutover-edit-time YAML-violation pattern at Edit time deterministically; codification-alone-doesn't-enforce gap closed for the recurring case
+- **DOGFOODING note**: this same validator catches HT-state.md cutover edits AT EDIT TIME going forward; H.9.11 cutover edit on HT-state.md IS the first dogfood-test of the validator it ships
+
+### MANDATORY per-phase pre-approval gate (per ADR-0002 + ADR-0001 invariants)
+
+Parallel architect + code-reviewer; both APPROVED-with-revisions; 18 FLAGs absorbed single-pass (4 HIGH + 8 MEDIUM + 6 LOW; 2 convergent thematic clusters):
+
+- **Architect** (3 HIGH + 5 MEDIUM + 3 LOW):
+  - HIGH-1: Quoted-multiline-scalar continuation regex risk — ABSORBED via `/^\s/.test(line)` skip-indented (true top-level YAML keys MUST start at column 0)
+  - HIGH-2: `replace_all` semantics mismatch with first-occurrence-only `String.replace` — ABSORBED via `existing.split(oldStr).join(newStr)` (validate-no-bare-secrets.js H.7.21 precedent); MultiEdit out-of-scope deferral via `Array.isArray(toolInput.edits)` log + approve
+  - HIGH-3: Test 86 sed/tr JSON-encoding brittleness + missing Edit-event variant — ABSORBED via Node JSON.stringify event-payload construction + dual Write/Edit fault-injection
+  - MEDIUM-1: Path-scope-as-array predestines drift — ABSORBED via inline comment requiring ADR amendment for new entries
+  - MEDIUM-2: Hook ordering implicit — ABSORBED via FIRST-after-config-guard registration + Probe 13 ordering test
+  - MEDIUM-3: Latency budget unquantified — ABSORBED via Probes 11+12 cold-start + in-scope latency
+  - MEDIUM-4: Frontmatter-removal silent-pass — ABSORBED via explicit `frontmatter_missing_or_malformed` block for in-scope paths
+  - MEDIUM-5: Manifest bump rationale — ABSORBED via 1.14.0 minor lock; no patch fallback
+  - LOW-1: Block reason reorder — ABSORBED via drift-note 80 attribution at top
+  - LOW-2: Forward-slash-only path convention comment — ABSORBED via inline header comment
+  - LOW-3: REQUIRES_DUP_KEY_CHECK governance — ABSORBED via ADR-amendment requirement (folded with MEDIUM-1)
+- **Code-reviewer** (1 HIGH + 3 MEDIUM + 3 LOW):
+  - **HIGH-CR1 LIVE BUG**: Test 86 wrong counter variables `TESTS_PASSED`/`TESTS_FAILED` instead of `passed`/`failed` (silently discards test results) — ABSORBED via lowercase counter rewrite matching Test 85 precedent
+  - **MEDIUM-CR2**: Test 86 trap-not-reset hygiene — ABSORBED via single-quoted trap + `trap - EXIT` reset matching Test 85 L547 precedent
+  - **MEDIUM-CR3**: `$`-pattern divergence in `String.replace` second arg — ABSORBED via `newStr.replace(/\$/g, '$$$$')` sanitization before first-occurrence replace
+  - MEDIUM-CR4: `extractFrontmatter` early-close on `---` inside block scalars — DOCUMENTED via inline comment (HT-state.md uses flow scalars only; safe today)
+  - LOW-CR5: First-duplicate-only reporting suppresses N>1 simultaneous duplicates — ACCEPTED as YAGNI
+  - LOW-CR6: Log bloat on out-of-scope approves — ABSORBED via suppressed `logger('approve')` for out-of-scope paths
+  - LOW-CR7: Test 86 JSON encoding fragility — DOCUMENTED via synthetic-fixture-only inline comment
+
+Convergent FLAGs: (a) Test 86 correctness (architect HIGH-3 + code-reviewer HIGH-CR1 + MEDIUM-CR2 + LOW-CR7) — comprehensive Test 86 rewrite; (b) Edit-simulation correctness (architect HIGH-2 + code-reviewer MEDIUM-CR3) — handle replace_all + sanitize $-patterns. Both reviewers concur on absorb-FLAGs-first verdict.
+
+### Methodology
+
+Sub-plan + MANDATORY per-phase pre-approval gate per ADR-0002 substrate-fundament + ADR-0001 invariants + ADR-0006 invariant-amendment governance. 5 of 5 HT.1.6 triggers fire (fresh design surface + institutional discipline encoding + HIGH-class bug catchable at design + substrate-fundament touching + test surface expansion).
+
+### Verification
+
+3-tier PASS: 83/83 install.sh smoke (+Test 86; was 82/82) + 68/68 `_h70-test.js` asserts (unchanged) + 17-baseline contracts-validate (was 16-baseline; +1 hook-not-deployed for new validator per established pattern). Validator self-smoke 5/5: Write block + Edit block + MultiEdit approve + clean frontmatter approve + missing-frontmatter block + malformed-JSON approve (fail-soft per ADR-0001 invariant 2). 0 ESLint errors on new validator (215 LoC); ADR-0006 invariant 5 active suppression-detection: 0 `eslint-disable` directives.
+
+### Plugin manifest
+
+`1.13.1 → 1.14.0` (minor) per architect MEDIUM-5 absorption — NEW PreToolUse hook registration is observable contract addition per HT.1.7 + H.9.7 minor-bump-for-new-hook-surface precedent; H.7.20 patch precedent does NOT apply (extension of existing validator's trigger ≠ new hook); HT.2.3 Part B no-bump precedent does NOT apply (non-observable upgrade). Locked minor — no patch fallback.
+
+### Drift-note 80 + 78(b) CLOSED
+
+Drift-note 80 (5-recurrence cutover-edit-time YAML-violation) + drift-note 78(b) (substrate ledger-write convention enforcement gap) both flipped to CLOSED. Drift-notes 79 + 78(a) remain OPEN (orthogonal surfaces — drift-note 79 = config-guard.js enhancement; drift-note 78(a) = bash code fix sweep across 17 `_OUT=$()` smoke-harness sites).
+
+### Pattern-level observations
+
+1. **5-recurrence-as-escalation-threshold validated empirically** — substrate's deterministic intervention threshold IS recurrence-five (not three; not seven); convention codification alone insufficient at recurrence-five+ for author Edit-pattern habits
+2. **Convergent-FLAG-detection at 18-FLAG single-pass absorption** — gate-as-correctness-safeguard scaled to 2 convergent thematic clusters; 1 LIVE BUG caught (HIGH-CR1 wrong counter variables would have silently discarded Test 86 results)
+3. **Dogfood-validator-on-its-own-cutover pattern** — H.9.11 cutover edit on HT-state.md IS the first invocation of the validator it ships; closes the loop on self-empirical validation
+4. **Empirical pre-validation pattern 30-phase confirmed** (HT.1.8-1.15 + HT.2.1-2.5 + HT.3.1-3.3 + H.9.0-H.9.9 + H.9.11)
+
+### Soak gate impact
+
+H.9.11 is CLEAN-toward-v2.0.0 (no new ADR; no new substrate convention doc; no schema change; new validator additive; manifest minor bump for observable contract addition). Counter advances 2/5+ → 3/5+ post-H.9.7 reset. Next: H.9.10 Atomics.wait true-sleep migration in `_lib/lock.js` per user-directed sequencing (gate-required; closes `_lib/lock.js` L70-72 drift-note candidate).
+
+---
+
 ## [unreleased] — 2026-05-12 — H.9.9 error-critic.js fail-soft contract upgrade per ADR-0001 invariant 2 (MANDATORY-gate; closes HT.2.3 Part B deferred-work cohort)
 
 **Eleventh sub-phase of post-HT H.9.x track; MANDATORY-gate phase per ADR-0002 substrate-fundament + ADR-0001 invariants; the highest-stakes phase shape in H.9.x trajectory (touches load-bearing ADR-0001 invariant 2).** Migrates `hooks/scripts/error-critic.js` from `withLock` (exits 2 on lock-acquisition timeout via `_lib/lock.js:88-89`; VIOLATES ADR-0001 invariant 2) to `acquireLock` + `releaseLock` primitives (return false-on-timeout). Mirrors HT.2.3 Part B Option B2 pattern. install.sh smoke 81/81 → 82/82 (+Test 85). NO manifest bump (HT.2.3 Part B exact-analogue precedent).

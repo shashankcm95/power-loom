@@ -561,6 +561,76 @@ EOF
   fi
   rm -rf "$h99_failure_dir" 2>/dev/null
 
+  # Test 86: H.9.11 — PreToolUse YAML frontmatter validator catches duplicate
+  # top-level keys at Edit/Write time (drift-note 80 URGENT 5-recurrence closure +
+  # drift-note 78(b) ledger-write convention enforcement gap). Fault-injects a
+  # synthetic HT-state.md with duplicate `last_session_phase_priors:` opener;
+  # pipes both Write- and Edit-event JSON to validator; asserts both block.
+  # Test 85 conventions: lowercase passed/failed counters (L557/560 precedent);
+  # `trap - EXIT` reset after manual cleanup (L547 precedent); Node JSON.stringify
+  # for event-payload encoding (architect HIGH-3 absorption).
+  echo -n "  Test 86 (H.9.11 validate-yaml-frontmatter blocks duplicate last_session_phase_priors on Write + Edit): "
+  T86_TMP=$(mktemp -d)
+  trap 'rm -rf "$T86_TMP"' EXIT
+  mkdir -p "$T86_TMP/swarm/thoughts/shared"
+  T86_HT_STATE="$T86_TMP/swarm/thoughts/shared/HT-state.md"
+  # Synthetic fixture only — controlled content (no backslashes); never adapt
+  # this fixture-build to pipe real HT-state.md content. (code-reviewer LOW-CR7
+  # documented constraint.)
+  cat > "$T86_HT_STATE" <<'EOF'
+---
+last_session_phase: "test"
+last_session_phase_priors:
+  - "entry 1"
+last_session_phase_priors:
+  - "duplicate opener bug"
+---
+body
+EOF
+
+  # Write-event variant
+  T86_INPUT=$(node -e "
+    const fs = require('fs');
+    console.log(JSON.stringify({
+      tool_name: 'Write',
+      tool_input: {
+        file_path: '$T86_HT_STATE',
+        content: fs.readFileSync('$T86_HT_STATE', 'utf8')
+      }
+    }));
+  ")
+  T86_EXIT=0
+  T86_OUT=$(echo "$T86_INPUT" | node "$SCRIPT_DIR/hooks/scripts/validators/validate-yaml-frontmatter.js") || T86_EXIT=$?
+
+  # Edit-event variant (drift-note 80 root cause is the Edit pattern, not Write)
+  T86_EDIT_INPUT=$(node -e "
+    console.log(JSON.stringify({
+      tool_name: 'Edit',
+      tool_input: {
+        file_path: '$T86_HT_STATE',
+        old_string: 'last_session_phase: \"test\"',
+        new_string: 'last_session_phase: \"test\"\nlast_session_phase_priors:\n  - \"injected dup opener\"'
+      }
+    }));
+  ")
+  T86_EDIT_EXIT=0
+  T86_EDIT_OUT=$(echo "$T86_EDIT_INPUT" | node "$SCRIPT_DIR/hooks/scripts/validators/validate-yaml-frontmatter.js") || T86_EDIT_EXIT=$?
+
+  rm -rf "$T86_TMP"
+  trap - EXIT
+
+  if [ $T86_EXIT -ne 0 ] || [ $T86_EDIT_EXIT -ne 0 ]; then
+    echo "FAIL: validator exit Write=$T86_EXIT Edit=$T86_EDIT_EXIT (expected 0; fail-soft contract)"
+    failed=$((failed + 1))
+  elif echo "$T86_OUT" | grep -q '"decision":"block"' && echo "$T86_OUT" | grep -q "last_session_phase_priors" \
+    && echo "$T86_EDIT_OUT" | grep -q '"decision":"block"' && echo "$T86_EDIT_OUT" | grep -q "last_session_phase_priors"; then
+    echo "OK (blocked dup-key on both Write + Edit paths)"
+    passed=$((passed + 1))
+  else
+    echo "FAIL: validator did not block dup-key (Write=${T86_OUT:0:80} Edit=${T86_EDIT_OUT:0:80})"
+    failed=$((failed + 1))
+  fi
+
   # Test 65: H.8.7 — adr.js symlink defense (chaos M3)
   echo -n "  Test 65 (H.8.7 adr.js symlink defense; symlink in ADRS_DIR ignored): "
   T65_TMPDIR=$(mktemp -d)
