@@ -334,14 +334,19 @@ EOF
   # First-run on a fresh machine may take ~5-10s to fetch markdownlint-cli2 into
   # npx cache; subsequent runs are ~2-3s. Acceptable smoke-harness latency.
   echo -n "  Test 80 (H.9.0+H.9.6 markdownlint in local smoke harness; substrate + swarm/kb-architecture-planning/): "
-  T80_OUT=$(cd "$SCRIPT_DIR" && npx --yes markdownlint-cli2 "**/*.md" "swarm/kb-architecture-planning/**/*.md" "#node_modules" "#swarm" 2>&1)
-  T80_EXIT=$?
+  # H.9.6.2: explicit `|| T80_EXIT=$?` guard required because install.sh runs with
+  # `set -euo pipefail` (line 2); a bare `T80_OUT=$(failing_cmd 2>&1)` triggers
+  # errexit BEFORE the if/else branch can report FAIL, hiding the failure mode
+  # (caught by CI when H.9.6 introduced duplicate `last_session_phase_priors:`
+  # key in HT-state.md frontmatter — Test 83 failed silently locally; CI surfaced).
+  T80_EXIT=0
+  T80_OUT=$(cd "$SCRIPT_DIR" && npx --yes markdownlint-cli2 "**/*.md" "swarm/kb-architecture-planning/**/*.md" "#node_modules" "#swarm" 2>&1) || T80_EXIT=$?
   if [ $T80_EXIT -eq 0 ]; then
     echo "OK (substrate markdown lint clean; 0 errors)"
     passed=$((passed + 1))
   else
-    echo "FAIL: markdownlint reported errors"
-    echo "$T80_OUT" | tail -5
+    echo "FAIL: markdownlint reported errors (exit $T80_EXIT)"
+    echo "$T80_OUT" | head -30
     failed=$((failed + 1))
   fi
 
@@ -361,14 +366,15 @@ EOF
   # First-run on a fresh machine may take ~10-15s to download shellcheck binary
   # into npx cache; subsequent runs are ~1-2s. Acceptable smoke-harness latency.
   echo -n "  Test 81 (H.9.1 shellcheck error-severity in local smoke harness; npx shellcheck against substrate .sh files): "
-  T81_OUT=$(cd "$SCRIPT_DIR" && find . -name "*.sh" -not -path "./node_modules/*" -not -path "./.git/*" -print0 | xargs -0 npx --yes shellcheck --severity=error 2>&1)
-  T81_EXIT=$?
+  # H.9.6.2: see Test 80 comment for `|| T81_EXIT=$?` rationale.
+  T81_EXIT=0
+  T81_OUT=$(cd "$SCRIPT_DIR" && find . -name "*.sh" -not -path "./node_modules/*" -not -path "./.git/*" -print0 | xargs -0 npx --yes shellcheck --severity=error 2>&1) || T81_EXIT=$?
   if [ $T81_EXIT -eq 0 ]; then
     echo "OK (substrate shellcheck clean at error severity; 0 errors)"
     passed=$((passed + 1))
   else
-    echo "FAIL: shellcheck reported errors"
-    echo "$T81_OUT" | tail -5
+    echo "FAIL: shellcheck reported errors (exit $T81_EXIT)"
+    echo "$T81_OUT" | head -30
     failed=$((failed + 1))
   fi
 
@@ -390,15 +396,16 @@ EOF
   # file parsed individually; xargs continues on failure + propagates non-zero
   # exit code if any file fails.
   echo -n "  Test 82 (H.9.2 JSON syntax in local smoke harness; jq empty against substrate .json files): "
-  T82_OUT=$(cd "$SCRIPT_DIR" && find . -name "*.json" -not -path "./node_modules/*" -not -path "./.git/*" -not -path "./swarm/run-state/*" -print0 | xargs -0 -n1 jq empty 2>&1)
-  T82_EXIT=$?
+  # H.9.6.2: see Test 80 comment for `|| T82_EXIT=$?` rationale.
+  T82_EXIT=0
+  T82_OUT=$(cd "$SCRIPT_DIR" && find . -name "*.json" -not -path "./node_modules/*" -not -path "./.git/*" -not -path "./swarm/run-state/*" -print0 | xargs -0 -n1 jq empty 2>&1) || T82_EXIT=$?
   T82_COUNT=$(cd "$SCRIPT_DIR" && find . -name "*.json" -not -path "./node_modules/*" -not -path "./.git/*" -not -path "./swarm/run-state/*" | wc -l | tr -d ' ')
   if [ $T82_EXIT -eq 0 ]; then
     echo "OK (substrate JSON syntax clean; $T82_COUNT files checked, 0 errors)"
     passed=$((passed + 1))
   else
-    echo "FAIL: jq reported JSON syntax errors"
-    echo "$T82_OUT" | tail -5
+    echo "FAIL: jq reported JSON syntax errors (exit $T82_EXIT)"
+    echo "$T82_OUT" | head -30
     failed=$((failed + 1))
   fi
 
@@ -424,22 +431,38 @@ EOF
   echo -n "  Test 83 (H.9.5 yaml-lint on substrate frontmatter; extracted .md frontmatter blocks): "
   T83_TMPDIR=$(mktemp -d)
   T83_COUNT=0
+  # H.9.6.2: track per-file source mapping so a yaml-lint failure can report
+  # which substrate file owns the bad frontmatter (drift-note 78 — H.9.6
+  # CI-break post-mortem surfaced that the yaml-lint stack-trace alone, with
+  # no source-file path, made diagnosis hard until cross-referenced manually).
+  T83_MANIFEST="$T83_TMPDIR/manifest.txt"
+  : > "$T83_MANIFEST"
   while IFS= read -r T83_FILE; do
     if head -1 "$T83_FILE" 2>/dev/null | grep -q "^---$"; then
       T83_COUNT=$((T83_COUNT + 1))
       awk 'BEGIN{state=0} /^---$/ { if(state==0){state=1;next}; if(state==1){state=2;exit} } state==1' "$T83_FILE" > "$T83_TMPDIR/fm-$T83_COUNT.yaml"
+      echo "fm-$T83_COUNT.yaml -> $T83_FILE" >> "$T83_MANIFEST"
     fi
   done < <(find "$SCRIPT_DIR" -name "*.md" -not -path "*/node_modules/*" -not -path "*/.git/*" -not -path "*/swarm/run-state/*")
-  T83_OUT=$(npx --yes yaml-lint "$T83_TMPDIR"/fm-*.yaml 2>&1)
-  T83_EXIT=$?
-  rm -rf "$T83_TMPDIR"
+  # H.9.6.2: see Test 80 comment for `|| T83_EXIT=$?` rationale (this is the
+  # exact site where the set -e + cmd-sub failure-hiding bug bit at H.9.6).
+  T83_EXIT=0
+  T83_OUT=$(npx --yes yaml-lint "$T83_TMPDIR"/fm-*.yaml 2>&1) || T83_EXIT=$?
   if [ $T83_EXIT -eq 0 ]; then
     echo "OK (substrate frontmatter YAML 1.2 valid; $T83_COUNT files checked, 0 errors)"
     passed=$((passed + 1))
+    rm -rf "$T83_TMPDIR"
   else
-    echo "FAIL: yaml-lint reported frontmatter errors"
-    echo "$T83_OUT" | tail -10
+    echo "FAIL: yaml-lint reported frontmatter errors (exit $T83_EXIT)"
+    echo "$T83_OUT" | head -30
+    # H.9.6.2: extract which fm-N.yaml file(s) appear in yaml-lint output;
+    # cross-reference manifest to surface owning substrate .md path(s).
+    echo "  Failing frontmatter sources (per manifest):"
+    echo "$T83_OUT" | grep -oE 'fm-[0-9]+\.yaml' | sort -u | while IFS= read -r FM; do
+      grep "^$FM " "$T83_MANIFEST" || true
+    done
     failed=$((failed + 1))
+    rm -rf "$T83_TMPDIR"
   fi
 
   # Test 65: H.8.7 — adr.js symlink defense (chaos M3)

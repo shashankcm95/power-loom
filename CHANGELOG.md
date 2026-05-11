@@ -8,6 +8,99 @@ For granular per-phase detail, see annotated tags `phase-H.x.y` and `swarm/H.x.y
 
 ---
 
+## [unreleased] — 2026-05-11 — H.9.6.2 Test 83 hardening — fix set -e + cmd-sub failure-hiding bug in Tests 80-83 + diagnostic improvements + drift-note 78
+
+**Eighth sub-phase of post-HT H.9.x track per user-reframed v2.0 trajectory; post-H.9.6.1-hotfix retrospective phase.** H.9.6 introduced duplicate `last_session_phase_priors:` key in HT-state.md; CI Test 83 caught (yaml-lint rejected per YAML 1.2 spec) but local install.sh smoke ALSO failed — with **truncated output**. Root cause: `T_OUT=$(failing_cmd 2>&1)` under install.sh `set -euo pipefail` (line 2) triggers errexit on cmd-substitution failure, bypassing the if/else FAIL diagnostic + early-exiting install.sh before `Results: N passed, M failed` line. The test "failed" but the diagnostic was hidden. **Without H.9.6.2, every future format-discipline test failure would hide locally + only surface at CI** — exactly the antipattern H.9.0 was supposed to close.
+
+### Empirical reproduction of root cause
+
+```bash
+$ cat <<'EOF' | bash
+set -euo pipefail
+echo "Before"
+FOO=$(false)
+echo "After"  # never prints
+EOF
+Before
+$ echo $?
+1
+```
+
+Confirmed across all 4 Test 80-83 sites in `tests/smoke-ht.sh`.
+
+### What landed
+
+- **Tests 80 (markdownlint) / 81 (shellcheck) / 82 (jq empty) / 83 (yaml-lint)**: bash pattern fixed via safe Option C `T_EXIT=0; T_OUT=$(...) || T_EXIT=$?`. Option A (`|| true` mask) rejected — discards $? so T_EXIT always 0. Option B (`set +e / set -e` toggle) rejected — more verbose; idiomatic Option C is the standard bash safe-cmd-sub pattern.
+- **Diagnostic improvements**: `head -30` (was `tail -5`/`tail -10`) — lint tools emit failing file path + error context at TOP of output; `tail` clipped the actually-useful diagnostic. Plus `(exit $T_EXIT)` added to FAIL message to surface tool's specific exit code (some tools emit different codes per failure mode).
+- **Test 83 per-file manifest mapping**: writes `fm-N.yaml -> /abs/path/to/.md` records to `$T83_TMPDIR/manifest.txt`; on yaml-lint failure greps output for `fm-N.yaml` references + cross-references manifest + prints owning substrate `.md` source path(s). H.9.6.1 post-mortem confirmed this is the missing piece — yaml-lint stack trace alone (without source-file resolution) made diagnosis hard.
+- **drift-note 78 NEW**:
+  - (a) **17 `_OUT=$()` latent set -e sites** across `tests/smoke-h{4,7,8,ht}.sh` have the same bug; currently dormant because all 17 tests pass; lights up on any future regression or new failure mode. Mechanical fix is the H.9.6.2 pattern. Deferred to dedicated future phase per architect cumulative-audit FLAG (d) `avoid multi-component atomic ships`.
+  - (b) **Substrate ledger-write convention enforcement gap** — H.9.5.1 BACKLOG decision-record entry codified the `last_session_phase_priors:` block-list convention; H.9.6 cutover violated it 30 min later. Codification alone doesn't enforce; need either author-discipline checklist OR deterministic pre-commit hook (`grep -c "^last_session_phase_priors:" HT-state.md == 1`). Hook candidate deferred to H.9.11 PreToolUse ADR-status validator scope expansion.
+
+### Fault-injection verification
+
+Injected duplicate `last_session_phase_priors:` key into HT-state.md (reproducing H.9.6's bug); ran install.sh smoke:
+
+```text
+Test 83 (H.9.5 yaml-lint on substrate frontmatter; extracted .md frontmatter blocks): FAIL: yaml-lint reported frontmatter errors (exit 1)
+  ...yaml-lint error stack with file:line context...
+  Failing frontmatter sources (per manifest):
+fm-44.yaml -> /Users/.../swarm/thoughts/shared/HT-state.md
+
+  Results: 77 passed, 2 failed
+```
+
+Three behavior changes confirmed: (1) Test 83 reports FAIL properly (was: silent early-exit); (2) Diagnostic surfaces the owning substrate file (was: only `fm-N.yaml` temp filename); (3) install.sh continues past Test 83 + reports Results line (was: install.sh exited mid-loop).
+
+### Methodology
+
+Sub-plan-only per HT.1.6 decision-rationale-matrix + H.9.0-H.9.6 pure-process/doc precedent. 4 of 5 triggers absent + 1 present in fix-form (HIGH-class bug catchable at design — the H.9.6.1 hotfix made the bug visible; this phase IS the fix).
+
+### Substantive-vs-clean
+
+H.9.6.2 is mechanical pure-process-improvement (bash idiom correction; diagnostic surface hardening). No schema/ADR/convention change. Counts as 9 of 5+ clean phases since HT.3.1. **H.9.6.1 EXCLUDED** per substrate convention (hotfixes restore prior state; don't add institutional commitment).
+
+### Soak gate
+
+H.9.6.2 = **9 of 5+ clean phases** since HT.3.1. Threshold met since H.9.4. Progression: H.9.0 → H.9.1 → H.9.2 → H.9.3 → H.9.4 → H.9.5 → H.9.5.1 → H.9.6 → H.9.6.2 (H.9.6.1 hotfix excluded).
+
+### Verification
+
+- **install.sh smoke (clean state)**: 79/79 unchanged
+- **_h70-test.js asserts**: 64/64 unchanged
+- **contracts-validate.js violations**: 16-baseline only
+- **Fault-injection test**: Test 83 correctly reports FAIL + per-file manifest identifies source + install.sh continues to Results line (3 behavior changes vs pre-H.9.6.2)
+- **Empirical bash repro**: confirms set -e fires on `FOO=$(false)` (motivating the fix)
+
+### Plugin manifest
+
+`1.12.3` UNCHANGED per pure-process-improvement convention.
+
+### Wallclock
+
+~45 min end-to-end.
+
+### Pattern-level observations
+
+- **Substrate-as-testing-framework reframe encoding** — H.9.6.2 demonstrates the test harness itself is substrate; the set -e interaction was a substrate bug (bash idiom error), not a test-content bug.
+- **Bug-visible-at-CI-not-local antipattern** — when local smoke runs fail silently (set -e + cmd-sub), CI is the only diagnostic surface. Closing this gap means future tests fail loudly + locally.
+- **Convention-vs-enforcement gap** — H.9.5.1 codified the priors-block-list convention; H.9.6 violated it 30 min later. Pattern: every substrate convention needs both (a) clear codification AND (b) deterministic enforcement. drift-note 78 captures the enforcement gap for future H.9.11 absorption.
+- **Hotfix-as-sub-phase shape** — post-incident phases come in pairs: hotfix (H.9.6.1; restore prior state; not soak-counting) + structural-fix (H.9.6.2; prevent recurrence; soak-counting).
+
+### Next
+
+**H.9.7** — ESLint baseline on substrate `.js` files. **MANDATORY-gate per H.9.5.1 architect re-bucket FLAG** (lint config decisions = institutional discipline encoding). Requires parallel architect + code-reviewer pre-approval before substantive work begins.
+
+---
+
+## [unreleased] — 2026-05-11 — H.9.6.1 hotfix — remove duplicate `last_session_phase_priors:` key in HT-state.md
+
+**Hotfix (commit `57f78ae`); NOT a soak-gate-counting phase per substrate convention.** H.9.6 cutover edit accidentally re-introduced the exact bug H.9.5 originally fixed (duplicate `last_session_phase_priors:` keys). yaml-lint rejected per YAML 1.2 spec; CI Test 83 caught. Single-line deletion at HT-state.md line 6 restored prior YAML 1.2 valid state. Local install.sh smoke failed silently due to set -e + cmd-sub bug (root-caused + fixed at H.9.6.2 sibling phase).
+
+Documented for audit trail; convention enforcement gap captured in drift-note 78.
+
+---
+
 ## [unreleased] — 2026-05-11 — H.9.6 extend Test 80 markdownlint scope to `swarm/kb-architecture-planning/` — closes H.9.4 drift-note candidate
 
 **Seventh sub-phase of post-HT H.9.x track per user-reframed v2.0 trajectory; mechanical scope extension.** H.9.6 closes the H.9.4 drift-note candidate captured at HT-state.md line 61 (`drift-note candidate to extend Test 80 scope to include swarm/kb-architecture-planning/`). Single-line edit at `tests/smoke-ht.sh:328` adds explicit include glob `swarm/kb-architecture-planning/**/*.md` positioned before existing `#swarm` exclude (markdownlint-cli2 ordered-glob semantics: explicit include before broader exclude takes precedence). install.sh smoke 79/79 unchanged; file count 130 → 134. **No plugin manifest bump** per pure-process-improvement convention.
