@@ -267,26 +267,32 @@ validators['kb-architecture-doc-count'] = function () {
   return violations;
 };
 
-// H.9.12 Component D: bidirectional `related:` validation extended to
-// kb/architecture/ tree. WARN-ONLY MODE for initial wire-in: surfaces known
-// asymmetric links via stderr but does NOT increment totalViolations
-// (preserves contracts-validate.js 17-baseline monotonic-non-decreasing
-// invariant). Drift-note 82 captures the cohort for H.9.13 mass-fix; once
-// closed, this validator flips from warn-only to hard-violation.
+// H.9.12/13/14 Component D: bidirectional `related:` validation in
+// kb/architecture/ tree. History:
+//   - H.9.12: Introduced in WARN-ONLY mode (asymmetric links surfaced via
+//     stderr without incrementing totalViolations; preserved 17-baseline
+//     monotonic-non-decreasing invariant; drift-note 82 captured 23-link
+//     cohort for H.9.13 mass-fix).
+//   - H.9.13: Mass-fix closed cohort (23 asymmetric → 0 via reciprocal
+//     back-link insertions across 9 destination docs).
+//   - H.9.14: FLIP to HARD-violation mode (this revision). Baseline=0
+//     means flip adds 0 new violations at current state; provides
+//     regression protection against re-introduction. Completes the
+//     warn-only-then-fix-then-flip pattern codified at H.9.13 close.
 //
-// Key-name normalization (gate code-reviewer HIGH-CR1 LIVE BUG absorption):
-// listKbArchitectureFiles() returns `kbId: architecture/<subdir>/<basename>`
-// matching the `related:` value format used in kb/architecture frontmatter.
-// Without this, the `if (!relatedMap.has(target)) continue` guard would
-// silently skip every cross-reference, making the validator a no-op.
+// Key-name normalization (H.9.12 gate code-reviewer HIGH-CR1 LIVE BUG
+// absorption): listKbArchitectureFiles() returns `kbId:
+// architecture/<subdir>/<basename>` matching the `related:` value format
+// used in kb/architecture frontmatter. Without this, the
+// `if (!relatedMap.has(target)) continue` guard would silently skip
+// every cross-reference, making the validator a no-op.
 //
-// Separate function from pattern-related-bidirectional (gate architect
+// Separate function from pattern-related-bidirectional (H.9.12 architect
 // HIGH-3 absorption — validator-per-concern convention per
 // kb/architecture/discipline/single-responsibility.md; clean violation
-// attribution; matches L188 + L214 separation pattern).
+// attribution; matches L188 + L214 separation pattern). Both validators
+// now share identical {kind, from, to, fix} violation entry shape.
 validators['kb-architecture-related-bidirectional'] = function () {
-  // WARN-ONLY: violations array intentionally always empty for H.9.12.
-  // H.9.13 closure flips this to hard-violation mode.
   const violations = [];
   const relatedMap = new Map();
   for (const { kbId, path: fp } of listKbArchitectureFiles()) {
@@ -296,26 +302,19 @@ validators['kb-architecture-related-bidirectional'] = function () {
       relatedMap.set(kbId, new Set(related));
     } catch { /* corrupt frontmatter or read error; skip — fail-soft */ }
   }
-  const asymmetricLinks = [];
   for (const [kbId, related] of relatedMap.entries()) {
     for (const target of related) {
       // Skip references outside kb/architecture tree (cross-tree refs allowed)
       if (!relatedMap.has(target)) continue;
       const reverse = relatedMap.get(target);
       if (!reverse.has(kbId)) {
-        asymmetricLinks.push({ from: kbId, to: target });
+        violations.push({
+          kind: 'asymmetric-related-link',
+          from: kbId,
+          to: target,
+          fix: `Add "${kbId}" to ${target}.md frontmatter "related" array`,
+        });
       }
-    }
-  }
-  // Emit stderr warnings for visibility (institutional discipline encoding);
-  // drift-note 82 cohort captured for H.9.13 mass-fix.
-  if (asymmetricLinks.length > 0) {
-    process.stderr.write(`  ⚠ kb-architecture-related-bidirectional (WARN-ONLY MODE per H.9.12; drift-note 82 cohort): ${asymmetricLinks.length} asymmetric link(s) — cohort for H.9.13 mass-fix\n`);
-    for (const link of asymmetricLinks.slice(0, 10)) {
-      process.stderr.write(`      ${link.from} → ${link.to} (no back-link)\n`);
-    }
-    if (asymmetricLinks.length > 10) {
-      process.stderr.write(`      ... and ${asymmetricLinks.length - 10} more (see drift-note 82 for full cohort)\n`);
     }
   }
   return violations;

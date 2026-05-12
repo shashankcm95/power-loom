@@ -8,6 +8,58 @@ For granular per-phase detail, see annotated tags `phase-H.x.y` and `swarm/H.x.y
 
 ---
 
+## [unreleased] — 2026-05-12 — H.9.14 Component D flip: `kb-architecture-related-bidirectional` WARN-ONLY → HARD-violation (mechanical-flip; completes warn-only-then-fix-then-flip pattern; manifest patch 1.15.0 → 1.15.1)
+
+**Mechanical flip** of the `kb-architecture-related-bidirectional` validator from WARN-ONLY mode (H.9.12) to HARD-violation mode. Now safe because H.9.13 closed the asymmetric cohort (baseline=0). Flip adds 0 new violations at current state + provides regression protection against re-introduction. Completes step 4 of the warn-only-then-fix-then-flip pattern codified at H.9.13 close.
+
+### What landed
+
+- **Component A flip** (`scripts/agent-team/contracts-validate.js` L287-322): removed WARN-ONLY scaffolding (stderr emission block + intermediate `asymmetricLinks` array); added `violations.push({kind, from, to, fix})` inside the asymmetric-detection loop. Now mirrors `pattern-related-bidirectional` (L221-245) shape — same violation entry structure, same severity. Top-of-function comment updated to reflect H.9.12/H.9.13/H.9.14 history.
+- **Component B Test 89** (`tests/smoke-ht.sh` +51 LoC after Test 88): regression test verifying HARD-violation fires on asymmetric injection. Synthetic fault: removes one back-link entry from `single-responsibility.md` via Node-based mutation (portable across BSD/Linux per H.9.12.1 lesson), runs `contracts-validate.js`, asserts exit=1 + asym ≥1 + Total ≥18; restores original content BEFORE asserting (defensive cleanup); re-runs to verify 17-baseline restored (sanity check).
+- **Plugin manifest bump 1.15.0 → 1.15.1 patch**: observable substrate quality change for `contracts-validate.js` consumers (CI + dev workflows + `--json` output structure). Matches H.9.10 Atomics.wait quality-change patch precedent.
+
+### Why no gate / why mechanical-flip shape
+
+- H.9.12 plan's "Out of scope" section pre-labeled this as "option-axis decision; INVOKED gate". Re-evaluation post-H.9.13:
+  - The OPTION (warn vs hard) was resolved at H.9.12; H.9.14 is EXECUTION of pre-decided plan, not new design surface
+  - No schema change; no new option-axis; no institutional discipline encoding
+  - LOW HIGH-class bug risk: baseline=0 (H.9.13 closed cohort); flip is mechanical mirror of existing `pattern-related-bidirectional`; Test 89 catches regression
+- 0 of 5 HT.1.6 triggers fire in execution context → mechanical-flip shape (matches H.9.13 0-of-5 hotfix-cohort precedent)
+- Empirical safety net replaces formal gate: contracts-validate regression scan + Test 89 fault-injection + smoke 85/85 → 86/86
+
+### Verification
+
+- install.sh smoke: 85/85 → **86/86** (+Test 89; fault: exit=1 asym=1 total=18; baseline: asym=0 total=17)
+- _h70-test.js: 67/67 (unchanged)
+- contracts-validate.js: 17-baseline preserved + `kb-architecture-related-bidirectional: 0 violation(s)` (asymmetric=0 post-H.9.13)
+- ESLint: 0 errors on `contracts-validate.js` (suppression-check: 0 `eslint-disable`)
+- HT-state.md drift-note 80 vigilance: 0 duplicate top-level YAML keys
+
+### Substrate state delta
+
+- install.sh smoke: 85/85 → 86/86 (+1; Test 89)
+- _h70-test.js: 67/67 (unchanged)
+- contracts-validate.js: 17-baseline (unchanged); `kb-architecture-related-bidirectional` now HARD-fires (was WARN-ONLY)
+- Plugin manifest: 1.15.0 → **1.15.1** (patch; observable contracts-validate output structure change)
+- Soak gate counter: **5/5+ THRESHOLD MET** (unchanged; mechanical-flip does NOT advance counter per H.9.13 + H.9.12.1 precedent)
+- Drift-notes: 79 + 78(a) + 81 OPEN (unchanged from post-H.9.13); 80 + 78(b) + 82 CLOSED
+
+### Pattern observation
+
+**Warn-only-then-fix-then-flip pattern complete (3-phase arc)**:
+- H.9.12: introduce WARN-ONLY validator surfacing 23 asymmetric without blocking (institutional discipline encoding)
+- H.9.13: mechanical mass-fix closes cohort (asymmetric → 0)
+- H.9.14: flip to HARD-violation safely (baseline=0; regression protection via Test 89)
+
+This is reusable for any **introduce-new-invariant-on-non-conforming-substrate** scenario where existing substrate has known violations that must be closed before strict enforcement. Cleaner than alternatives:
+- Strict-from-start: blocks all edits to non-conforming docs indefinitely (Convention A backward-compat problem)
+- Silent-cohort-fix: doesn't capture the institutional discipline (loses the "we want this" signal)
+- Disable-then-fix-then-enable: validator off during fix window means no protection against parallel re-introductions
+
+The pattern preserves: monotonic-non-decreasing baseline + institutional discipline visibility + clean regression protection post-fix.
+
+---
+
 ## [unreleased] — 2026-05-12 — H.9.13 Convention A section migration + drift-note 82 cohort mass-fix (mechanical hotfix-cohort; NO formal gate per 0 of 5 HT.1.6 triggers; closes drift-note 82 OPEN → CLOSED-at-H.9.13)
 
 **Mechanical doc-only mass-fix** closing two H.9.12-surfaced cohort gaps: (a) Convention A → Convention B section convergence across 5 kb/architecture docs; (b) drift-note 82 asymmetric `related:` link cohort (23 back-links restored across 9 destination docs). No substrate runtime change; no manifest bump; no per-phase gate. Files modified: 11 kb/architecture/ docs (5 Convention A + 9 Convention B receivers with 2 overlap = 11 unique) + new sub-plan.

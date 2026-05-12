@@ -857,3 +857,54 @@ EOF
     echo "FAIL: $T88_PASSES/$T88_TOTAL passes; fails=$T88_FAILS [raw: ${T88_RESULT:0:200}]"
     failed=$((failed + 1))
   fi
+
+  # Test 89: H.9.14 — kb-architecture-related-bidirectional HARD-violation regression
+  # Verifies that the validator now HARD-fires (was WARN-ONLY pre-H.9.14) on
+  # asymmetric link injection. Synthetic fault: remove one back-link entry
+  # from single-responsibility.md, expect contracts-validate to report
+  # asymmetric-related-link violations + Total ≥ 18 + non-zero exit. Restore
+  # original content + re-verify 17-baseline.
+  #
+  # Per H.9.12.1 portability lesson: Node-based mutation (avoids sed -i
+  # BSD/Linux divergence). Per H.9.11 + H.9.10 + H.9.12 precedent: lowercase
+  # passed/failed counters; restore BEFORE asserting (defensive cleanup even
+  # if assertion fails — ensures no permanent doc state change on test failure).
+  echo -n "  Test 89 (H.9.14 kb-architecture-related-bidirectional HARD-violation regression; fault-injection + restore): "
+  T89_RESULT=$(node -e "
+    const fs = require('fs');
+    const { execSync } = require('child_process');
+    const targetDoc = '$SCRIPT_DIR/skills/agent-team/kb/architecture/crosscut/single-responsibility.md';
+    const validator = '$SCRIPT_DIR/scripts/agent-team/contracts-validate.js';
+    let origContent;
+    try { origContent = fs.readFileSync(targetDoc, 'utf8'); }
+    catch (e) { console.log('FAIL: cannot read target doc: ' + e.message); process.exit(1); }
+    const mutated = origContent.replace(/^  - architecture\/ai-systems\/agent-design\n/m, '');
+    if (mutated === origContent) { console.log('FAIL: mutation no-op (back-link entry not found)'); process.exit(1); }
+    fs.writeFileSync(targetDoc, mutated);
+    let faultOutput = '', faultExit = 0;
+    try { faultOutput = execSync('node ' + validator + ' 2>&1', { encoding: 'utf8' }); }
+    catch (e) { faultOutput = (e.stdout && e.stdout.toString()) || e.message; faultExit = e.status || 1; }
+    fs.writeFileSync(targetDoc, origContent);
+    const asymCount = (faultOutput.match(/asymmetric-related-link/g) || []).length;
+    const totalMatch = faultOutput.match(/Total violations: (\d+)/);
+    const total = totalMatch ? parseInt(totalMatch[1]) : 0;
+    if (faultExit !== 1) { console.log('FAIL: fault expected exit 1 got ' + faultExit); process.exit(1); }
+    if (asymCount < 1) { console.log('FAIL: fault expected asym count >=1 got ' + asymCount); process.exit(1); }
+    if (total < 18) { console.log('FAIL: fault expected Total >=18 got ' + total); process.exit(1); }
+    let baselineOutput = '', baselineExit = 0;
+    try { baselineOutput = execSync('node ' + validator + ' 2>&1', { encoding: 'utf8' }); }
+    catch (e) { baselineOutput = (e.stdout && e.stdout.toString()) || e.message; baselineExit = e.status || 1; }
+    const baselineAsym = (baselineOutput.match(/asymmetric-related-link/g) || []).length;
+    const baselineTotalMatch = baselineOutput.match(/Total violations: (\d+)/);
+    const baselineTotal = baselineTotalMatch ? parseInt(baselineTotalMatch[1]) : 0;
+    if (baselineAsym !== 0) { console.log('FAIL: baseline asym expected 0 got ' + baselineAsym); process.exit(1); }
+    if (baselineTotal !== 17) { console.log('FAIL: baseline Total expected 17 got ' + baselineTotal); process.exit(1); }
+    console.log('OK (fault: exit=' + faultExit + ' asym=' + asymCount + ' total=' + total + '; baseline: asym=' + baselineAsym + ' total=' + baselineTotal + ')');
+  " 2>&1)
+  if echo "$T89_RESULT" | grep -q "^OK"; then
+    echo "$T89_RESULT"
+    passed=$((passed + 1))
+  else
+    echo "FAIL: $T89_RESULT"
+    failed=$((failed + 1))
+  fi
