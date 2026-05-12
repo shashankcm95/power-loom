@@ -875,31 +875,39 @@ EOF
     const { execSync } = require('child_process');
     const targetDoc = '$SCRIPT_DIR/skills/agent-team/kb/architecture/crosscut/single-responsibility.md';
     const validator = '$SCRIPT_DIR/scripts/agent-team/contracts-validate.js';
+    function runValidator() {
+      let output = '', exitCode = 0;
+      try { output = execSync('node ' + validator + ' 2>&1', { encoding: 'utf8' }); }
+      catch (e) { output = (e.stdout && e.stdout.toString()) || e.message; exitCode = e.status || 1; }
+      const totalMatch = output.match(/Total violations: (\d+)/);
+      return {
+        output,
+        exitCode,
+        total: totalMatch ? parseInt(totalMatch[1]) : -1,
+        asymCount: (output.match(/asymmetric-related-link/g) || []).length,
+      };
+    }
     let origContent;
     try { origContent = fs.readFileSync(targetDoc, 'utf8'); }
     catch (e) { console.log('FAIL: cannot read target doc: ' + e.message); process.exit(1); }
+    // H.9.14.1 hotfix: capture PRE-fault baseline first (portable across CI Linux
+    // [hook-deployment validator silent when settings.json absent → Total=0] +
+    // local macOS [Total=17 from installed-plugin lag]); compare deltas not absolutes.
+    const preBaseline = runValidator();
+    if (preBaseline.total < 0) { console.log('FAIL: pre-baseline Total not parseable; output=' + preBaseline.output.slice(0, 200)); process.exit(1); }
+    if (preBaseline.asymCount !== 0) { console.log('FAIL: pre-baseline asym expected 0 got ' + preBaseline.asymCount); process.exit(1); }
     const mutated = origContent.replace(/^  - architecture\/ai-systems\/agent-design\n/m, '');
     if (mutated === origContent) { console.log('FAIL: mutation no-op (back-link entry not found)'); process.exit(1); }
     fs.writeFileSync(targetDoc, mutated);
-    let faultOutput = '', faultExit = 0;
-    try { faultOutput = execSync('node ' + validator + ' 2>&1', { encoding: 'utf8' }); }
-    catch (e) { faultOutput = (e.stdout && e.stdout.toString()) || e.message; faultExit = e.status || 1; }
+    const fault = runValidator();
     fs.writeFileSync(targetDoc, origContent);
-    const asymCount = (faultOutput.match(/asymmetric-related-link/g) || []).length;
-    const totalMatch = faultOutput.match(/Total violations: (\d+)/);
-    const total = totalMatch ? parseInt(totalMatch[1]) : 0;
-    if (faultExit !== 1) { console.log('FAIL: fault expected exit 1 got ' + faultExit); process.exit(1); }
-    if (asymCount < 1) { console.log('FAIL: fault expected asym count >=1 got ' + asymCount); process.exit(1); }
-    if (total < 18) { console.log('FAIL: fault expected Total >=18 got ' + total); process.exit(1); }
-    let baselineOutput = '', baselineExit = 0;
-    try { baselineOutput = execSync('node ' + validator + ' 2>&1', { encoding: 'utf8' }); }
-    catch (e) { baselineOutput = (e.stdout && e.stdout.toString()) || e.message; baselineExit = e.status || 1; }
-    const baselineAsym = (baselineOutput.match(/asymmetric-related-link/g) || []).length;
-    const baselineTotalMatch = baselineOutput.match(/Total violations: (\d+)/);
-    const baselineTotal = baselineTotalMatch ? parseInt(baselineTotalMatch[1]) : 0;
-    if (baselineAsym !== 0) { console.log('FAIL: baseline asym expected 0 got ' + baselineAsym); process.exit(1); }
-    if (baselineTotal !== 17) { console.log('FAIL: baseline Total expected 17 got ' + baselineTotal); process.exit(1); }
-    console.log('OK (fault: exit=' + faultExit + ' asym=' + asymCount + ' total=' + total + '; baseline: asym=' + baselineAsym + ' total=' + baselineTotal + ')');
+    if (fault.exitCode !== 1) { console.log('FAIL: fault expected exit 1 got ' + fault.exitCode); process.exit(1); }
+    if (fault.asymCount < 1) { console.log('FAIL: fault expected asym count >=1 got ' + fault.asymCount); process.exit(1); }
+    if (fault.total !== preBaseline.total + 1) { console.log('FAIL: fault expected Total=' + (preBaseline.total + 1) + ' (preBaseline+1) got ' + fault.total); process.exit(1); }
+    const postBaseline = runValidator();
+    if (postBaseline.asymCount !== 0) { console.log('FAIL: post-restore asym expected 0 got ' + postBaseline.asymCount); process.exit(1); }
+    if (postBaseline.total !== preBaseline.total) { console.log('FAIL: post-restore Total expected ' + preBaseline.total + ' got ' + postBaseline.total); process.exit(1); }
+    console.log('OK (preBaseline=' + preBaseline.total + '; fault: exit=' + fault.exitCode + ' asym=' + fault.asymCount + ' total=' + fault.total + '; postBaseline=' + postBaseline.total + ')');
   " 2>&1)
   if echo "$T89_RESULT" | grep -q "^OK"; then
     echo "$T89_RESULT"
