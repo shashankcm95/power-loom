@@ -8,7 +8,84 @@ For granular per-phase detail, see annotated tags `phase-H.x.y` and `swarm/H.x.y
 
 ---
 
-## [unreleased] — 2026-05-12 — H.9.16 Drift-notes 78(a)/79/81 closure (1 CLOSE + 2 DEFER with documented rationale; INVOKED gate; 7 FLAGs absorbed; manifest unchanged at 1.16.0; soak gate 6/5+ → 7/5+ STRENGTHENED)
+---
+
+## [2.0.0] — 2026-05-12 — v2.0.0 substrate release (first SemVer-committed major; consolidates H.7.x → H.9.x track; 17 phases + 6+ hotfixes shipped since v1.0.0)
+
+**First SemVer-committed major release of power-loom (claude-power-loom)**. Substrate is empirically validated across 17+ phases of MANDATORY + INVOKED + no-formal-gate ships. ALL chaos findings (20 from pre-v2.0.0 audit batch) CLOSED at H.9.15. ALL drift-notes RESOLVED (4 CLOSED + 2 DEFERRED-with-codified-activation-criteria + 0 OPEN) at H.9.16.
+
+### What v2.0.0 commits to
+
+**Substrate primitives**:
+
+- **HETS** (Hierarchical Engineering Team Simulation): orchestration of multi-agent Claude Code work via tree-of-teams (PM → Senior → Mid → Junior); scoped contracts; budget allocations; trust-tiered verification
+- **Persistent agent-identity reputation** across sessions (`~/.claude/agent-identities.json` + `~/.claude/agent-patterns.json`)
+- **19+ skills** (agent-team, chaos-test, deploy-checklist, route-decide, prompt-enrichment, research-mode, self-improve, skill-forge, etc.)
+- **6+ ADRs** (ADR-0001 fail-soft hooks, ADR-0002 substrate-fundament, ADR-0003 mechanical-vs-governance, ADR-0004 documentary-personas, ADR-0005 slopfiles-authoring-discipline, ADR-0006 fix-don't-suppress)
+- **Chaos test harness** (`/chaos-test` slash command + super-agent + persona contracts + tree-tracker)
+
+**Hook surface** (deterministic enforcement; pure-Node; zero runtime deps):
+
+- **PreToolUse**: validate-yaml-frontmatter (drift-note 80 closure at H.9.11), validate-kb-doc (H.8.8 + H.9.12 enforcement extension), validate-no-bare-secrets (H.7.21 + H.9.15 SEC-1/2/3/4 extensions), validate-adr-drift, validate-plan-schema, validate-frontmatter-on-skills, verify-plan-gate, config-guard, fact-force-gate
+- **PostToolUse:Bash**: error-critic (H.9.9 fail-soft contract; H.9.15 atomic-write migration), prompt-pattern-enrichment
+- **Stop**: auto-store-enrichment (drift-note 80 5-recurrence escalation closure)
+- **SessionStart**: session-reset
+- **PreCompact**: pre-compact-save (auto-checkpoint to mempalace-fallback.md)
+
+**Validators + invariants**:
+
+- **YAML frontmatter** (HT-state.md): 0 duplicate top-level keys per drift-note 80 vigilance; PreToolUse Edit/Write gate
+- **KB doc quality bar** (_PRINCIPLES.md L42-46): version + tags ≥3 + sources_consulted ≥2 + kb_id matches path; HARD-block Component A; SOFT-advisory Component B (sections); H.9.15 typeof version strict + tilde fence support
+- **Bare secrets**: OpenAI sk-/sk-proj-, Anthropic sk-ant-, github_pat_ {82,}, AWS keys, PEM private key blocks, literal-secret-assignment patterns with widened char-class @!#$%^&*~; PLACEHOLDER expansion (`_HERE` suffix + `changeme` prefix) per H.9.15 SEC-3/4; documented intentional gaps (base64, Stripe pk_live_, hex blobs)
+- **ADR drift**: per-phase pre-approval gate enforcement for substrate-fundament changes
+- **Plan schema**: ExitPlanMode forcing-instruction at HT.1.4
+- **Contract verifier**: agent-team output validation via triple-contract (antiPattern + structure + evidence)
+
+**Discipline** (institutional):
+
+- **ADR-0001** fail-soft hooks invariants 2+3 (PostToolUse exits 0; Edit/Write fail-soft on tool input)
+- **ADR-0002** substrate-fundament + `_lib/*` carve-out + per-phase pre-approval gate
+- **ADR-0006** fix-don't-suppress + invariant 5 (0 `eslint-disable` directives across substrate)
+- **Drift-note 80 vigilance** (HT-state.md surgical Python cutover; single `last_session_phase_priors:` key preservation)
+- **Soak gate counter** (5+ clean phases post-ADR-0006 institutional commitment required for release-gate); at v2.0.0 ship: **8/5+ STRENGTHENED ×3** (H.9.15 + H.9.16 + H.9.17)
+
+### Track record at v2.0.0 ship
+
+- **install.sh smoke**: 99/99 (Tests 1-102)
+- **_h70-test.js**: 67/67
+- **contracts-validate.js**: 17 baseline
+- **ESLint**: 0 errors; 0 `eslint-disable` directives (ADR-0006 invariant 5 active)
+- **Markdownlint**: 0 errors on substrate (.md files); H.9.0 + H.9.6 in local verification harness
+- **yaml-lint**: PASS on all substrate frontmatter (145 files; H.9.5 in local harness)
+- **shellcheck**: 0 errors at severity=error on all `tests/smoke-*.sh` (H.9.1 in local harness)
+- **jq**: 30 substrate .json files parse cleanly (H.9.2 in local harness)
+- **6+ MANDATORY-gate phases** with 1 LIVE BUG caught per gate at H.9.10/11/12/14/15 + 1 scope-expansion catch at H.9.16
+- **All chaos findings (20) CLOSED** at H.9.15 (2 CRITICAL + 8 HIGH + 10 MEDIUM)
+- **All drift-notes RESOLVED** at H.9.16 (4 CLOSED: 78(a) + 78(b) + 80 + 82; 2 DEFERRED-with-activation-criteria: 79 + 81; 0 OPEN)
+
+### Forward-deferred with activation criteria (NOT v2.0.0 scope)
+
+- **drift-note 79** (CONFIG_GUARD_BOOTSTRAP env-var for config-guard.js first-creation bypass): activation-triggered if 2nd config-bootstrap scenario emerges OR substrate consumer reports config-guard blocking legitimate workflow. H.9.7 ship commit `7e0aa1b` referenced as bootstrap-workaround precedent (one-time Bash heredoc).
+- **drift-note 81** (ESLint v10 globals re-validation): activation-triggered at ESLint v10 release; substrate phase intending major-version migration spawns ~30 min focused re-validation phase.
+
+### Phase-by-phase history (preserved under v2.0.0 umbrella below)
+
+The individual phase entries below (originally tagged `[unreleased]` then re-tagged `[2.0.0]` at this release-ceremony commit) provide the institutional audit trail: each H.9.x + late HT.2.x phase narrative is preserved verbatim. Re-tagging at v2.0.0 release time is per Keep-a-Changelog convention. **Substrate value is in this audit trail**; consolidation here provides the high-level commitment summary while preserving drill-down detail.
+
+**Phase-arc summary**:
+
+- **HT.1.x track** (1.11.x through 1.12.x): hardening sub-phase; 14 sub-phases (HT.1.1 → HT.1.15); closed with ADR + path-convention codification
+- **HT.2.x track** (1.12.1 → unreleased): post-HT audit-followup Tier 1/2; 5 sub-phases (HT.2.1 → HT.2.5); closed with measurement-methodology doc + soak gate readiness
+- **HT.3.x track** (3 sub-phases; HT.3.1 → HT.3.3): post-HT audit-followup Tier 2 ADR codification; closed with ADR-0002 status flip
+- **H.9.x track** (17 phases since H.9.0): format-discipline (H.9.0-9.2) + KB-authoring + yaml-lint baseline + ESLint v9 + ADR-0006 (H.9.7) + atomic-write DRY (H.9.8) + error-critic fail-soft (H.9.9) + Atomics.wait true-sleep (H.9.10) + YAML frontmatter validator (H.9.11) + _PRINCIPLES.md enforcement (H.9.12) + Convention A cohort (H.9.13) + warn-only flip (H.9.14) + chaos findings closure (H.9.15) + drift-notes closure (H.9.16). Plus hotfix-cohort phases H.9.6.1 + H.9.6.2 + H.9.12.1 + H.9.14.1.
+
+### v2.0.0 → v2.x roadmap (post-release; not v2.0.0 commitments)
+
+- **v2.0.x patch**: hotfixes if any (live-hook end-to-end verification will surface any; user-action AFTER v2.0.0 ships)
+- **v2.1+ minor**: drift-note 79 implementation if activation criteria fire; marketplace clone-staleness automation; forward documentation (RELEASE.md, CONTRIBUTING.md) if substrate gains external contributors
+- **v2.x major**: ESLint v10 cohort phase (drift-note 81 trigger) when ESLint v10 releases
+
+## [2.0.0] — 2026-05-12 — H.9.16 Drift-notes 78(a)/79/81 closure (1 CLOSE + 2 DEFER with documented rationale; INVOKED gate; 7 FLAGs absorbed; manifest unchanged at 1.16.0; soak gate 6/5+ → 7/5+ STRENGTHENED)
 
 **INVOKED-gate phase per HT.1.6 triggers 3 (option-axis: close-vs-defer per drift-note) + 4 mild (institutional discipline encoding via defer rationales)**. Closes drift-note 78(a) via mechanical safe-pattern sweep across smoke test harness; defers drift-notes 79 + 81 with explicit activation criteria codified in HT-state.md ledger. Sets up H.9.17 (v2.0.0 release prep + tag).
 
@@ -110,7 +187,7 @@ For granular per-phase detail, see annotated tags `phase-H.x.y` and `swarm/H.x.y
 
 ---
 
-## [unreleased] — 2026-05-12 — H.9.15 Pre-v2.0.0 Chaos Findings Closure (20 findings: 2 CRITICAL + 8 HIGH + 10 MEDIUM; MANDATORY gate; 22 FLAGs absorbed; 1 LIVE BUG caught; manifest 1.15.1 → 1.16.0 minor)
+## [2.0.0] — 2026-05-12 — H.9.15 Pre-v2.0.0 Chaos Findings Closure (20 findings: 2 CRITICAL + 8 HIGH + 10 MEDIUM; MANDATORY gate; 22 FLAGs absorbed; 1 LIVE BUG caught; manifest 1.15.1 → 1.16.0 minor)
 
 **MANDATORY-gate phase per ADR-0002 substrate-fundament (touches security-critical hook + shared `_lib/frontmatter.js`) + 4/5 HT.1.6 triggers**. Closes ALL 20 findings from pre-v2.0.0 chaos test batch (4-auditor swarm). Sets up H.9.16 (drift-notes 78(a)/79/81 closure) → H.9.17 (v2.0.0 release prep + tag).
 
@@ -215,7 +292,7 @@ H.9.16: drift-notes 78(a)/79/81 investigation + closure (or documented-defer wit
 
 ---
 
-## [unreleased] — 2026-05-12 — H.9.14.1 CI hotfix (single-commit `main` per H.9.6.1 precedent; closes Test 89 baseline-portability bug introduced at H.9.14 96eb380)
+## [2.0.0] — 2026-05-12 — H.9.14.1 CI hotfix (single-commit `main` per H.9.6.1 precedent; closes Test 89 baseline-portability bug introduced at H.9.14 96eb380)
 
 **Single-commit hotfix on `main`** closing CI failure on H.9.14 (commits 96eb380 + 97a5096; latent for ~30 min). No substrate runtime change; no manifest bump; no per-phase gate (0 of 5 HT.1.6 triggers fire).
 
@@ -256,7 +333,7 @@ Documented in H.9.12.1 ledger but not proactively applied at H.9.14 Test 89 — 
 
 ---
 
-## [unreleased] — 2026-05-12 — H.9.14 Component D flip: `kb-architecture-related-bidirectional` WARN-ONLY → HARD-violation (mechanical-flip; completes warn-only-then-fix-then-flip pattern; manifest patch 1.15.0 → 1.15.1)
+## [2.0.0] — 2026-05-12 — H.9.14 Component D flip: `kb-architecture-related-bidirectional` WARN-ONLY → HARD-violation (mechanical-flip; completes warn-only-then-fix-then-flip pattern; manifest patch 1.15.0 → 1.15.1)
 
 **Mechanical flip** of the `kb-architecture-related-bidirectional` validator from WARN-ONLY mode (H.9.12) to HARD-violation mode. Now safe because H.9.13 closed the asymmetric cohort (baseline=0). Flip adds 0 new violations at current state + provides regression protection against re-introduction. Completes step 4 of the warn-only-then-fix-then-flip pattern codified at H.9.13 close.
 
@@ -308,7 +385,7 @@ The pattern preserves: monotonic-non-decreasing baseline + institutional discipl
 
 ---
 
-## [unreleased] — 2026-05-12 — H.9.13 Convention A section migration + drift-note 82 cohort mass-fix (mechanical hotfix-cohort; NO formal gate per 0 of 5 HT.1.6 triggers; closes drift-note 82 OPEN → CLOSED-at-H.9.13)
+## [2.0.0] — 2026-05-12 — H.9.13 Convention A section migration + drift-note 82 cohort mass-fix (mechanical hotfix-cohort; NO formal gate per 0 of 5 HT.1.6 triggers; closes drift-note 82 OPEN → CLOSED-at-H.9.13)
 
 **Mechanical doc-only mass-fix** closing two H.9.12-surfaced cohort gaps: (a) Convention A → Convention B section convergence across 5 kb/architecture docs; (b) drift-note 82 asymmetric `related:` link cohort (23 back-links restored across 9 destination docs). No substrate runtime change; no manifest bump; no per-phase gate. Files modified: 11 kb/architecture/ docs (5 Convention A + 9 Convention B receivers with 2 overlap = 11 unique) + new sub-plan.
 
@@ -347,7 +424,7 @@ The pattern preserves: monotonic-non-decreasing baseline + institutional discipl
 
 ---
 
-## [unreleased] — 2026-05-11 — H.9.12.1 CI hotfix (single-commit `main` per H.9.6.1 precedent; closes Test 85 stat-cascade Linux/macOS portability bug + Test 81 shellcheck binary download network failure)
+## [2.0.0] — 2026-05-11 — H.9.12.1 CI hotfix (single-commit `main` per H.9.6.1 precedent; closes Test 85 stat-cascade Linux/macOS portability bug + Test 81 shellcheck binary download network failure)
 
 **Single-commit hotfix on `main`** closing two latent CI failures surfaced post-H.9.12 push. No substrate runtime change; no manifest bump; no per-phase gate (0 of 5 HT.1.6 triggers fire). Files modified: `tests/smoke-ht.sh` (cascade reorder + system-shellcheck preference) + `.github/workflows/ci.yml` (apt-install shellcheck).
 
@@ -385,7 +462,7 @@ The pattern preserves: monotonic-non-decreasing baseline + institutional discipl
 
 ---
 
-## [unreleased] — 2026-05-12 — H.9.12 `_PRINCIPLES.md` enforcement extension (MANDATORY-gate per HT.1.6 trigger 4 institutional discipline encoding + ADR-0002 substrate-fundament; 15 FLAGs absorbed; 1 LIVE BUG caught at gate)
+## [2.0.0] — 2026-05-12 — H.9.12 `_PRINCIPLES.md` enforcement extension (MANDATORY-gate per HT.1.6 trigger 4 institutional discipline encoding + ADR-0002 substrate-fundament; 15 FLAGs absorbed; 1 LIVE BUG caught at gate)
 
 **Fourteenth sub-phase of post-HT H.9.x track; MANDATORY-gate per ADR-0002 substrate-fundament (hook subsystem PreToolUse decision-authority expansion {approve} → {approve, block}) + HT.1.6 trigger 4 (institutional discipline encoding — encoding-of-encoding for `swarm/kb-architecture-planning/_PRINCIPLES.md` authoring quality bar codified at HT.1.10/H.9.4 but currently advisory-only prose).** Extends `hooks/scripts/validators/validate-kb-doc.js` (H.8.8; 255 LoC → 533 LoC) with Component A (HARD-block frontmatter checks: `kb_id` matches path + `version: 1` + `tags` ≥3 + `sources_consulted` ≥2 per `_PRINCIPLES.md` L42-46) + Component B (SOFT-advisory section checks; alias-tolerant matching covering Convention A backward-compat). Extends `scripts/agent-team/contracts-validate.js` (787 LoC → 897 LoC) with Component C (KB size cap audit: WARN ≥45, ERROR ≥51 per L36; currently N=15) + Component D (`kb-architecture-related-bidirectional` validator in WARN-ONLY mode; surfaces 23 known asymmetric `related:` links per drift-note 82 cohort for H.9.13 mass-fix; preserves 17-baseline). install.sh smoke 84/84 → 85/85 (+Test 88 with 5 fixtures: 3 HARD-block + 1 SOFT-advisory + 1 out-of-scope). Plugin manifest 1.14.1 → 1.15.0 (minor — decision-surface expansion = observable contract change per architect MEDIUM-2 + code-reviewer MEDIUM-CR5 convergent absorption).
 
@@ -439,7 +516,7 @@ H.9.12 = **5 of 5+ clean phases since H.9.7's institutional commitment (ADR-0006
 
 ---
 
-## [unreleased] — 2026-05-12 — H.9.10 `_lib/lock.js` Atomics.wait true-sleep migration (gate-INVOKED per ADR-0002 invariant 4 `_lib/*` carve-out; closes drift-note candidate referenced at H.9.7 L70 comment)
+## [2.0.0] — 2026-05-12 — H.9.10 `_lib/lock.js` Atomics.wait true-sleep migration (gate-INVOKED per ADR-0002 invariant 4 `_lib/*` carve-out; closes drift-note candidate referenced at H.9.7 L70 comment)
 
 **Thirteenth sub-phase of post-HT H.9.x track; gate INVOKED (NOT MANDATORY) per ADR-0002 invariant 4 `_lib/*` carve-out + HT.1.7 + HT.1.13 + HT.2.3 + H.9.8 substrate-`_lib/*`-precedent; user-directed sequence H.9.11-before-H.9.10.** Migrates `scripts/agent-team/_lib/lock.js` busy-wait spin loop at L68-72 to `Atomics.wait` true-sleep on SharedArrayBuffer + Int32Array. Synchronous OS-level sleep; zero CPU usage during wait; same wall-clock elapsed; non-breaking change. install.sh smoke 83/83 → 84/84 (+Test 87 CPU-usage probe). Plugin manifest 1.14.0 → 1.14.1 patch bump per architect MEDIUM-5 absorption (observable substrate quality change).
 
@@ -505,7 +582,7 @@ H.9.10 is CLEAN-toward-v2.0.0 (no new ADR; no new substrate convention doc; no s
 
 ---
 
-## [unreleased] — 2026-05-12 — H.9.11 PreToolUse YAML frontmatter validator (MANDATORY-gate; closes drift-note 80 URGENT 5-recurrence escalation + drift-note 78(b) ledger-write convention enforcement gap)
+## [2.0.0] — 2026-05-12 — H.9.11 PreToolUse YAML frontmatter validator (MANDATORY-gate; closes drift-note 80 URGENT 5-recurrence escalation + drift-note 78(b) ledger-write convention enforcement gap)
 
 **Twelfth sub-phase of post-HT H.9.x track; MANDATORY-gate phase per ADR-0002 substrate-fundament (hook subsystem touching) + ADR-0001 invariants (new PreToolUse deny-decision authority); user-directed re-sequencing H.9.11-before-H.9.10 per drift-note 80 URGENT urgency.** Adds NEW PreToolUse:Edit|Write validator `hooks/scripts/validators/validate-yaml-frontmatter.js` (~215 LoC; pure-Node line-scan parser; zero-runtime-dep per ADR-0006 invariant 4) that detects duplicate top-level YAML keys in HT-state.md frontmatter at Edit/Write time. Two-layer defense with Test 83 yaml-lint at install.sh smoke. install.sh smoke 82/82 → 83/83 (+Test 86). Plugin manifest 1.13.1 → 1.14.0 minor bump per architect MEDIUM-5 absorption (new PreToolUse hook = observable contract addition).
 
@@ -573,7 +650,7 @@ H.9.11 is CLEAN-toward-v2.0.0 (no new ADR; no new substrate convention doc; no s
 
 ---
 
-## [unreleased] — 2026-05-12 — H.9.9 error-critic.js fail-soft contract upgrade per ADR-0001 invariant 2 (MANDATORY-gate; closes HT.2.3 Part B deferred-work cohort)
+## [2.0.0] — 2026-05-12 — H.9.9 error-critic.js fail-soft contract upgrade per ADR-0001 invariant 2 (MANDATORY-gate; closes HT.2.3 Part B deferred-work cohort)
 
 **Eleventh sub-phase of post-HT H.9.x track; MANDATORY-gate phase per ADR-0002 substrate-fundament + ADR-0001 invariants; the highest-stakes phase shape in H.9.x trajectory (touches load-bearing ADR-0001 invariant 2).** Migrates `hooks/scripts/error-critic.js` from `withLock` (exits 2 on lock-acquisition timeout via `_lib/lock.js:88-89`; VIOLATES ADR-0001 invariant 2) to `acquireLock` + `releaseLock` primitives (return false-on-timeout). Mirrors HT.2.3 Part B Option B2 pattern. install.sh smoke 81/81 → 82/82 (+Test 85). NO manifest bump (HT.2.3 Part B exact-analogue precedent).
 
@@ -639,7 +716,7 @@ H.9.9 is CLEAN-toward-v2.0.0 (NO new ADR; NO new substrate convention doc; NO sc
 
 ---
 
-## [unreleased] — 2026-05-12 — H.9.8 atomic-write DRY 9-site consolidation + helper API additive cleanup-on-error + H.9.7.1-equivalent yaml-lint hotfix-fold
+## [2.0.0] — 2026-05-12 — H.9.8 atomic-write DRY 9-site consolidation + helper API additive cleanup-on-error + H.9.7.1-equivalent yaml-lint hotfix-fold
 
 **Tenth sub-phase of post-HT H.9.x track; substantive multi-site `_lib/*` migration + helper API additive enhancement; FIRST post-H.9.7 clean phase toward v2.0.0 soak gate.** Migrates 9 substrate sites to `scripts/agent-team/_lib/atomic-write.js` shared helper (8 originally enumerated in helper's 2026-05-10 header inventory + 9th gate-surfaced site `quality-factors-backfill.js:124-128` via code-reviewer HIGH-CR3 catch — closes WEAKEST tmp form bare `.tmp` no pid suffix). install.sh smoke 81/81 unchanged. `_h70-test.js` 64 → 68 (+4 from 2 new cleanup-on-error tests). Plugin manifest 1.13.0 → 1.13.1 (patch — helper API contract additive; cleanup-on-error post-condition strictly strengthens).
 
@@ -708,7 +785,7 @@ H.9.8 is CLEAN-toward-v2.0.0 (NO new ADR; NO new substrate convention doc; NO sc
 
 ---
 
-## [unreleased] — 2026-05-11 — H.9.7 ESLint v9 baseline + NEW ADR-0006 fix-don't-suppress institutional commitment
+## [2.0.0] — 2026-05-11 — H.9.7 ESLint v9 baseline + NEW ADR-0006 fix-don't-suppress institutional commitment
 
 **Ninth sub-phase of post-HT H.9.x track; FIRST mandatory-gate phase per H.9.5.1 architect re-bucket; substrate-as-testing-framework reframe encoding at JavaScript content layer.** User directive at H.9.7 entry crystallized a new institutional principle: "the approach should never be to suppress and move on. It should always be fix before it gets out of control. we need to bake this into our plugin contract so we can increase reliability." Codified as NEW ADR-0006 (governance-tier; 6th ADR). install.sh smoke 79/79 → 81/81 (+2 tests). Plugin manifest 1.12.3 → 1.13.0 (minor — substantive substrate-fundament addition).
 
@@ -783,7 +860,7 @@ H.9.7 = NEW institutional commitment; clean-phase counter RESET. Roadmap: H.9.8 
 
 ---
 
-## [unreleased] — 2026-05-11 — H.9.6.2 Test 83 hardening — fix set -e + cmd-sub failure-hiding bug in Tests 80-83 + diagnostic improvements + drift-note 78
+## [2.0.0] — 2026-05-11 — H.9.6.2 Test 83 hardening — fix set -e + cmd-sub failure-hiding bug in Tests 80-83 + diagnostic improvements + drift-note 78
 
 **Eighth sub-phase of post-HT H.9.x track per user-reframed v2.0 trajectory; post-H.9.6.1-hotfix retrospective phase.** H.9.6 introduced duplicate `last_session_phase_priors:` key in HT-state.md; CI Test 83 caught (yaml-lint rejected per YAML 1.2 spec) but local install.sh smoke ALSO failed — with **truncated output**. Root cause: `T_OUT=$(failing_cmd 2>&1)` under install.sh `set -euo pipefail` (line 2) triggers errexit on cmd-substitution failure, bypassing the if/else FAIL diagnostic + early-exiting install.sh before `Results: N passed, M failed` line. The test "failed" but the diagnostic was hidden. **Without H.9.6.2, every future format-discipline test failure would hide locally + only surface at CI** — exactly the antipattern H.9.0 was supposed to close.
 
@@ -868,7 +945,7 @@ H.9.6.2 = **9 of 5+ clean phases** since HT.3.1. Threshold met since H.9.4. Prog
 
 ---
 
-## [unreleased] — 2026-05-11 — H.9.6.1 hotfix — remove duplicate `last_session_phase_priors:` key in HT-state.md
+## [2.0.0] — 2026-05-11 — H.9.6.1 hotfix — remove duplicate `last_session_phase_priors:` key in HT-state.md
 
 **Hotfix (commit `57f78ae`); NOT a soak-gate-counting phase per substrate convention.** H.9.6 cutover edit accidentally re-introduced the exact bug H.9.5 originally fixed (duplicate `last_session_phase_priors:` keys). yaml-lint rejected per YAML 1.2 spec; CI Test 83 caught. Single-line deletion at HT-state.md line 6 restored prior YAML 1.2 valid state. Local install.sh smoke failed silently due to set -e + cmd-sub bug (root-caused + fixed at H.9.6.2 sibling phase).
 
@@ -876,7 +953,7 @@ Documented for audit trail; convention enforcement gap captured in drift-note 78
 
 ---
 
-## [unreleased] — 2026-05-11 — H.9.6 extend Test 80 markdownlint scope to `swarm/kb-architecture-planning/` — closes H.9.4 drift-note candidate
+## [2.0.0] — 2026-05-11 — H.9.6 extend Test 80 markdownlint scope to `swarm/kb-architecture-planning/` — closes H.9.4 drift-note candidate
 
 **Seventh sub-phase of post-HT H.9.x track per user-reframed v2.0 trajectory; mechanical scope extension.** H.9.6 closes the H.9.4 drift-note candidate captured at HT-state.md line 61 (`drift-note candidate to extend Test 80 scope to include swarm/kb-architecture-planning/`). Single-line edit at `tests/smoke-ht.sh:328` adds explicit include glob `swarm/kb-architecture-planning/**/*.md` positioned before existing `#swarm` exclude (markdownlint-cli2 ordered-glob semantics: explicit include before broader exclude takes precedence). install.sh smoke 79/79 unchanged; file count 130 → 134. **No plugin manifest bump** per pure-process-improvement convention.
 
@@ -956,7 +1033,7 @@ Roadmap: H.9.7 ESLint baseline (MANDATORY-gate per H.9.5.1 re-bucket); H.9.8 ato
 
 ---
 
-## [unreleased] — 2026-05-11 — H.9.5.1 absorb post-compact audit FLAGs — codifies H.9.5 narrative-quoting convention as 5th lightweight BACKLOG decision-record entry
+## [2.0.0] — 2026-05-11 — H.9.5.1 absorb post-compact audit FLAGs — codifies H.9.5 narrative-quoting convention as 5th lightweight BACKLOG decision-record entry
 
 **Sixth sub-phase of post-HT H.9.x track per user-reframed v2.0 trajectory; pure-doc absorb-FLAGs phase.** Post-compact parallel architect + code-reviewer cumulative-trajectory audit of H.9.0-H.9.5 (option b per pre-compaction user direction `let's go with b + c just to be safe`) completed; architect verdict `minor-correction-needed / absorb-FLAGs-first` (1 HIGH + 1 MEDIUM + 1 LOW); code-reviewer verdict `semantically-lossless / proceed-with-H.9.6` (0 HIGH + 2 MEDIUM + 1 LOW). H.9.5.1 absorbs the architect HIGH FLAG by codifying as the 5th lightweight BACKLOG decision-record entry. install.sh smoke 79/79 unchanged. **No plugin manifest bump** per pure-doc absorb-FLAGs convention.
 
@@ -1034,7 +1111,7 @@ Roadmap (post-H.9.5.1 re-bucket): H.9.6 extend Test 80 scope (mechanical); H.9.7
 
 ---
 
-## [unreleased] — 2026-05-11 — H.9.5 yaml-lint on substrate frontmatter — sibling format-discipline 4th application + strict YAML 1.2 conformance refactor
+## [2.0.0] — 2026-05-11 — H.9.5 yaml-lint on substrate frontmatter — sibling format-discipline 4th application + strict YAML 1.2 conformance refactor
 
 **Fifth sub-phase of post-HT H.9.x track per user-reframed v2.0 trajectory.** H.9.5 closes a real substrate coverage gap: substrate frontmatter (130 `.md` files) was permissively parseable by substrate's own `parseFrontmatter` but rejected by strict YAML 1.2 parsers (yaml-lint, python yaml, js-yaml). Migration wraps 223 narrative scalar values + block-list items in double-quoted form across 12 files; consolidates 8 duplicate `last_session_phase_prior:` keys in HT-state.md into a single block-list under `last_session_phase_priors:`. Adds Test 83 with `npx --yes yaml-lint` on extracted frontmatter blocks; asserts exit 0. install.sh smoke 78/78 → 79/79. **No plugin manifest bump** per pure-content-migration convention.
 
@@ -1112,7 +1189,7 @@ H.9.5 = **6 of 5+ clean phases** since HT.3.1 (threshold met since H.9.4). Progr
 
 ---
 
-## [unreleased] — 2026-05-11 — H.9.4 Pending docs completion — `_TAXONOMY.md` + `_NOTES.md` status drift + `_routing.md` planning doc — lands 5/5+ soak gate
+## [2.0.0] — 2026-05-11 — H.9.4 Pending docs completion — `_TAXONOMY.md` + `_NOTES.md` status drift + `_routing.md` planning doc — lands 5/5+ soak gate
 
 **Fifth sub-phase of post-HT H.9.x track; pure-doc completion phase. v2.0.0 SOAK GATE THRESHOLD MET.** H.9.4 closes the explicit "pending docs related work" surfaced by user after H.9.3 ship. Three components bundled as 1 atomic docs-completion phase: (a) `swarm/kb-architecture-planning/_TAXONOMY.md` status update reflecting H.9.3 ships (5 entries); (b) `swarm/kb-architecture-planning/_NOTES.md` updates — session log batch row + Information Hiding pattern entry update + 3 ai-systems candidate entries → SHIPPED; (c) NEW `swarm/kb-architecture-planning/_routing.md` planning doc (~200 LoC) closing 6 forward-references in `rag-anchoring.md` for the substrate's planned BM25-style routing infrastructure. Lands **5 of 5+ clean phases since HT.3.1** — v2.0.0 release gate retest GREEN-eligible. **No plugin manifest bump** per pure-doc convention.
 
@@ -1194,7 +1271,7 @@ H.9.4 counts as **5 of 5+ clean phases** since HT.3.1 (last institutional commit
 
 ---
 
-## [unreleased] — 2026-05-11 — H.9.3 KB authoring batch (5 planned KB targets) — closes HT.1.12-followup docs-pass-incomplete gap
+## [2.0.0] — 2026-05-11 — H.9.3 KB authoring batch (5 planned KB targets) — closes HT.1.12-followup docs-pass-incomplete gap
 
 **Fourth sub-phase of post-HT H.9.x track; substantive pure-doc batch authoring.** H.9.3 closes the user-visible docs-pass-incomplete gap surfaced at H.9.1 retrospective + promoted to BACKLOG.md HT.1.12-followup entry at H.9.2. Authors all 5 planned architecture KB targets at substantive depth (~280-330 LoC each; total 1474 LoC of new architectural content); migrates planned-refs from `## Related KB docs (planned, not yet authored)` body sections in 5 source KBs into frontmatter `related:` arrays (bidirectional graph convention restored). Substrate's `contracts-validate.js` bidirectional `related:` validator no longer silent on these refs — all 5 target `kb_id`s now exist + surfaced by graph walk. **No plugin manifest bump** per pure-doc convention.
 
@@ -1280,7 +1357,7 @@ H.9.3 counts as **4 of 5+ clean phases** needed since HT.3.1 (last institutional
 
 ---
 
-## [unreleased] — 2026-05-11 — H.9.2 JSON syntax in local verification harness (sibling format-discipline 3rd application under H.9.0 + H.9.1)
+## [2.0.0] — 2026-05-11 — H.9.2 JSON syntax in local verification harness (sibling format-discipline 3rd application under H.9.0 + H.9.1)
 
 **Third sub-phase of post-HT H.9.x track; sibling format-discipline 3rd application.** H.9.2 establishes substrate-wide JSON syntax gate at local-verification layer for substrate `*.json` files, paralleling H.9.0's markdownlint addition for `*.md` and H.9.1's shellcheck addition for `*.sh`. Adds Test 82 to `tests/smoke-ht.sh` running `find . -name "*.json" -not -path "./node_modules/*" -not -path "./.git/*" -not -path "./swarm/run-state/*" -print0 | xargs -0 -n1 jq empty` against 30 substrate-active `.json` files; asserts exit 0. install.sh smoke 77/77 → 78/78. Adds BACKLOG.md `HT.1.12-followup` deferred-work entry tracking 5 unauthored planned KB targets (`agent-design`, `evaluation-under-nondeterminism`, `inference-cost-management`, `information-hiding`, `refusal-patterns`). **No plugin manifest bump** per pure-process-improvement convention.
 
@@ -1352,7 +1429,7 @@ H.9.2 counts as **3 of 5+ clean phases** needed since HT.3.1 (last institutional
 
 ---
 
-## [unreleased] — 2026-05-11 — H.9.1 shellcheck in local verification harness (sibling format-discipline pattern under H.9.0)
+## [2.0.0] — 2026-05-11 — H.9.1 shellcheck in local verification harness (sibling format-discipline pattern under H.9.0)
 
 **Second sub-phase of post-HT H.9.x track; sibling pattern under H.9.0.** H.9.1 establishes shellcheck at local-verification layer for substrate `*.sh` files, paralleling H.9.0's markdownlint addition for `*.md`. Adds Test 81 to `tests/smoke-ht.sh` running `npx --yes shellcheck --severity=error` against 10 substrate `*.sh` files (enumerated via `find` + `xargs` for future-extensibility); asserts exit 0. Adds `# shellcheck shell=bash` + `# shellcheck disable=SC2168` directives to `tests/smoke-h{4,7,8,ht}.sh` resolving 78 false-positive error-level findings caused by shellcheck's inability to follow `install.sh run_smoke_tests()` source-context. **No plugin manifest bump** per pure-process-improvement convention.
 
@@ -1418,7 +1495,7 @@ H.9.1 counts as **2 of 5+ clean phases** needed since HT.3.1 (last institutional
 
 ---
 
-## [unreleased] — 2026-05-11 — H.9.0 markdownlint in local verification harness (closes process gap from 2026-05-11 CI failure)
+## [2.0.0] — 2026-05-11 — H.9.0 markdownlint in local verification harness (closes process gap from 2026-05-11 CI failure)
 
 **First substantive sub-phase of post-HT H.9.x track.** H.9.0 closes the structural process gap surfaced by the 2026-05-11 CI markdown-lint failure post-HT.3.3 merge (22 MD037/MD038 errors accumulated across HT ledger entries because markdownlint wasn't in local verification — CI was sole enforcer + ran only on push to main). Adds Test 80 to `tests/smoke-ht.sh` running `npx --yes markdownlint-cli2 "**/*.md" "#node_modules" "#swarm"` against substrate; asserts exit 0. Adds 4th lightweight BACKLOG entry codifying ledger-authoring convention (backtick-wrap underscored substrate identifiers). **No plugin manifest bump** per pure-process-improvement convention.
 
@@ -1475,7 +1552,7 @@ H.9.0 counts as **1 of 5+ clean phases** needed since HT.3.1 (last institutional
 
 ---
 
-## [unreleased] — 2026-05-11 — HT.3.3 ADR-0002 status flip `proposed` → `accepted` (post-HT audit-followup Tier 2 third and final sub-phase; HT.3 CLOSED)
+## [2.0.0] — 2026-05-11 — HT.3.3 ADR-0002 status flip `proposed` → `accepted` (post-HT audit-followup Tier 2 third and final sub-phase; HT.3 CLOSED)
 
 **Post-HT audit-followup Tier 2 institutional reframing — third and final sub-phase; HT.3 CLOSED.** HT.3.3 flips ADR-0002 status `proposed` → `accepted` per HT.1.7 + HT.1.13 + ADR-0005 same-day-acceptance convention precedent. ADR-0002 should have shipped at `status: accepted` directly at HT.1.3 per the convention; the convention crystallized at HT.1.7 (post-HT.1.3); HT.3.3 retrofits the status to bring ADR-0002 into the established convention. Three shipped applications across three languages (HT.1.3 Node.js + HT.1.4 bash + HT.1.5 markdown) confirm the criterion is load-bearing in substrate practice. **No plugin manifest bump** per pure-doc/status-correction convention.
 
@@ -1556,7 +1633,7 @@ Sub-plan-only per HT.1.6 decision-rationale-matrix convention + HT.2.4 + HT.1.10
 
 ---
 
-## [unreleased] — 2026-05-11 — HT.3.2 measurement-methodology.md reframe (post-HT audit-followup Tier 2; second of 3 sub-phases)
+## [2.0.0] — 2026-05-11 — HT.3.2 measurement-methodology.md reframe (post-HT audit-followup Tier 2; second of 3 sub-phases)
 
 **Post-HT audit-followup Tier 2 institutional reframing — second sub-phase.** HT.3.2 strips imperative voice from `swarm/measurement-methodology.md`'s 5 canonical patterns + Scope-axis disambiguation section, replacing with descriptive observed-practice voice. Closes the framing-vs-content contradiction surfaced by 5-agent chaos test + HETS code review (two senior-architect agents independently flagged the doc as "institutional commitment dressed as observed practice"). Preserves the doc's existing "not an ADR; captures observed practice, not new institutional invariant" positioning by aligning voice with observation framing. **No plugin manifest bump** per pure-doc convention (matches HT.1.10/HT.1.12/HT.2.4 precedent).
 
@@ -1624,7 +1701,7 @@ Sub-plan-only per HT.1.6 decision-rationale-matrix convention. 5 of 5 triggers a
 
 ---
 
-## [unreleased] — 2026-05-11 — HT.3.1 ADR tier taxonomy codification (post-HT audit-followup Tier 2; first of 3 sub-phases)
+## [2.0.0] — 2026-05-11 — HT.3.1 ADR tier taxonomy codification (post-HT audit-followup Tier 2; first of 3 sub-phases)
 
 **Post-HT audit-followup Tier 2 institutional reframing — first sub-phase.** HT.3.1 codifies the 3-tier ADR taxonomy (technical / governance / editorial) at schema level. The taxonomy has been operating in prose since HT.1.13 (ADR-0005 lines 60-66 declare it + map each existing ADR to a tier); HT.3.1 makes the mapping machine-readable via new frontmatter `tier` field + NEW ADR-0004 codifying the field requirement as governance-tier institutional commitment + retroactive tag on 4 existing ADRs (0001/0002 technical, 0003 governance, 0005 editorial). Sub-plan-only methodology per HT.1.7 ADR-system enum extension precedent (codification of pre-existing prose, not fresh institutional commitment).
 
@@ -1685,7 +1762,7 @@ Sub-plan-only per HT.1.6 decision-rationale-matrix convention. 3 of 5 triggers a
 
 ---
 
-## [unreleased] — 2026-05-11 — HT.2.5 final sweep + soak gate readiness readout (HT.2 CLOSED; verdict GREEN)
+## [2.0.0] — 2026-05-11 — HT.2.5 final sweep + soak gate readiness readout (HT.2 CLOSED; verdict GREEN)
 
 **Hardening Track CLOSED.** HT.2.5 is the fifth and final HT.2 sub-phase. Two-track final sweep: Track 1 = HT.0.x finding spot-check (3 random findings) + drift-note inventory verification (14/14 closed); Track 2 = soak gate readiness readout publication. **Verdict: GREEN** — all 4 soak gate criteria empirically met. Substrate ready for next-track trajectory (H.9.x candidate).
 
@@ -1769,7 +1846,7 @@ Sub-plan-only per HT.2 master plan methodology table line 331 + HT.1.10/HT.1.12/
 
 ---
 
-## [unreleased] — 2026-05-10 — HT.2.4 doc-lag sweep (drift-notes 68 + 69 closed; fourth HT.2 sub-phase)
+## [2.0.0] — 2026-05-10 — HT.2.4 doc-lag sweep (drift-notes 68 + 69 closed; fourth HT.2 sub-phase)
 
 **HT.2 fourth sub-phase. Sub-plan-only methodology per HT.2 master plan methodology table line 330** (mechanical doc-lag cleanup; no fresh design surface; no option-axis fork; no behavior change). Closes 2 doc-lag drift-notes captured at HT.1.9 implementation. **No plugin manifest bump** per pure-doc convention (matches HT.1.10/HT.1.12/HT.1.14/HT.1.15/HT.2.1/HT.2.3 precedents).
 
@@ -1820,7 +1897,7 @@ Sub-plan-only per HT.2 master plan methodology table line 330 + HT.1.2/HT.1.4/HT
 
 ---
 
-## [unreleased] — 2026-05-10 — HT.2.3 hooks-discipline-edge sweep (drift-notes 67 + 75 closed; third HT.2 sub-phase; per-phase pre-approval UNCONDITIONAL)
+## [2.0.0] — 2026-05-10 — HT.2.3 hooks-discipline-edge sweep (drift-notes 67 + 75 closed; third HT.2 sub-phase; per-phase pre-approval UNCONDITIONAL)
 
 **HT.2 third sub-phase. Per-phase pre-approval gate INVOKED UNCONDITIONALLY per architect HIGH-2 absorption at HT.2.0 (option-axis design surface trigger on BOTH Part A + Part B).** Closes 2 hooks-discipline-edge drift-notes via Part A `_lib/lock.js` lazy parent-dir auto-creation + Part B `session-end-nudge.js` migration from inline lock primitive to shared `_lib/lock.js` primitives. **No plugin manifest bump** per architect HIGH-A1 absorption (pure-internal-refactor — Option A2 transparent + Option B2 no API surface; HT.1.10/HT.1.12/HT.1.14/HT.1.15 + HT.2.1 precedent).
 
@@ -1955,7 +2032,7 @@ HT.2.3 hooks-discipline-edge sweep (drift-notes 67 + 75; per-phase pre-approval 
 
 ---
 
-## [unreleased] — 2026-05-10 — HT.2.1 measurement-methodology codification doc (`swarm/measurement-methodology.md` — observed dogfooded practice across 9 case studies + 5 canonical patterns)
+## [2.0.0] — 2026-05-10 — HT.2.1 measurement-methodology codification doc (`swarm/measurement-methodology.md` — observed dogfooded practice across 9 case studies + 5 canonical patterns)
 
 **HT.2 first sub-phase. Per-phase pre-approval gate INVOKED per HT.1.10 convention-doc precedent.** Authors `swarm/measurement-methodology.md` (207 LoC) capturing observed dogfooded measurement-methodology practice across 9 case studies (6 active audit-method-and-currency / count-drift + option-axis-conflation drift-notes + 3 in-scope-resolution drift-notes) into a single substrate-internal convention doc. Third convention-doc institutional artifact in the `swarm/` namespace (sibling shape with HT.1.10 path-reference-conventions + HT.2.5 forthcoming soak-gate-readiness readout). **No version bump** per pure-doc convention (matches HT.1.10/HT.1.12/HT.1.15 precedents).
 
@@ -2016,7 +2093,7 @@ Code-reviewer HIGH-2 reported `validate-adr-drift.js` as missing from the substr
 
 ---
 
-## [unreleased] — 2026-05-10 — HT.1.15 _lib/safe-exec.js adoption decision (keep at 2-caller scope + lightweight BACKLOG canonical-pattern entry)
+## [2.0.0] — 2026-05-10 — HT.1.15 _lib/safe-exec.js adoption decision (keep at 2-caller scope + lightweight BACKLOG canonical-pattern entry)
 
 **Hardening Track refactor 15 of N. THIRD and FINAL lightweight institutional decision record per HT.1.6 BACKLOG.md declaration. CLOSES HT.1 backlog top-15 cap.** Documents canonical safe-subprocess pattern + adoption boundary; resolves drift-note 76 in-scope (sibling shape with HT.1.10 drift-note 70). **No version bump** per pure-doc convention (matches HT.1.10/1.12 precedents).
 
@@ -2104,7 +2181,7 @@ Both consumers have `H.8.4: ...safe-exec helper...` provenance comments — both
 
 ---
 
-## [unreleased] — 2026-05-10 — HT.1.14 auto-store-enrichment.js subprocess density (batched into in-process call)
+## [2.0.0] — 2026-05-10 — HT.1.14 auto-store-enrichment.js subprocess density (batched into in-process call)
 
 **Hardening Track refactor 14 of N.** Replaces 22-spawnSync worst-case in `auto-store-enrichment.js` `bumpSelfImproveCounters` with single in-process `require(SELF_IMPROVE_SCRIPT).bumpBatch(signals)` call. Closes HT.0.1 D.1 most-weighty hooks-layer optimization finding. **No version bump** per pure-refactor convention (matches HT.1.2/HT.1.8/HT.1.9/HT.1.11 precedent).
 
@@ -2465,7 +2542,7 @@ Per-phase pre-approval gate INVOKED with EXPLICIT decision rationale matrix per 
 
 ---
 
-## [unreleased] — 2026-05-10 — HT.1.9 Speculative-API exports cleanup sweep
+## [2.0.0] — 2026-05-10 — HT.1.9 Speculative-API exports cleanup sweep
 
 **Hardening Track refactor 9 of N.** Mechanical sweep converging substrate export-surface — drops 21 speculative-API exports across 7 files. Closes HT.0.1 D-finding (3 hooks/_lib/ modules with 7 speculative exports) + HT.0.2 D-finding (4 substrate scripts with 0-consumer module.exports) + HT.0.6 E-finding (`adr.js` exports with 0 external callers). **No version bump** per pure-refactor convention (matches HT.1.2 + HT.1.8 precedents).
 
@@ -2531,7 +2608,7 @@ Per-phase pre-approval gate INVOKED with EXPLICIT decision rationale matrix per 
 
 ---
 
-## [unreleased] — 2026-05-10 — HT.1.8 `withLock` DRY consolidation
+## [2.0.0] — 2026-05-10 — HT.1.8 `withLock` DRY consolidation
 
 **Hardening Track refactor 8 of N.** Mechanical DRY consolidation of lock primitive across 3 substrate scripts. Closes HT.0.2 D.4 finding (3-site DRY divergence post-`_lib/lock.js` extraction at H.3.2) + HT.0.8 Trajectory.2 confirmation. **No version bump** per pure-refactor convention (matches HT.1.2 parseFrontmatter DRY precedent — substrate-internal restructuring; no consumer-visible surface change).
 
