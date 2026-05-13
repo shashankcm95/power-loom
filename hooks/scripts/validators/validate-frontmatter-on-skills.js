@@ -67,6 +67,25 @@ function hasFrontmatter(content) {
   return true;
 }
 
+// H.9.19 v2.0.2 absorption: applyEdit helper mirrors validate-yaml-frontmatter.js
+// H.9.11 + validate-kb-doc.js H.9.19 precedent. Previously this validator used
+// `content = existing.replace(oldString, newString)` which covered first-occurrence
+// only — missing replace_all (only first match replaced) + $-pattern interpretation
+// (`$$`, `$1`-`$9`, `$&`, `$``, `$'` in newString interpreted as backreferences) +
+// MultiEdit (tool_input.edits[] silently ignored). H.9.19 upgrades all three.
+// Sister-validator precedent (yaml-frontmatter H.9.11; no-bare-secrets H.9.15).
+function applyEdit(existing, toolInput) {
+  const oldStr = toolInput.old_string || '';
+  const newStr = toolInput.new_string || '';
+  if (toolInput.replace_all === true) {
+    // split+join replaces ALL occurrences with LITERAL newStr (no $-pattern interpretation)
+    return existing.split(oldStr).join(newStr);
+  }
+  // First-occurrence semantics. Sanitize $-patterns: `$$` is escape for literal `$`.
+  const safeNewStr = newStr.replace(/\$/g, '$$$$');
+  return existing.replace(oldStr, safeNewStr);
+}
+
 let input = '';
 process.stdin.setEncoding('utf8');
 process.stdin.on('data', (chunk) => { input += chunk; });
@@ -89,10 +108,19 @@ process.stdin.on('end', () => {
       return;
     }
 
+    // H.9.19 absorption: MultiEdit unsupported (matches yaml-frontmatter H.9.11 +
+    // kb-doc H.9.19 absorption). Approving rather than silently mis-processing
+    // edits[] array shape preserves ADR-0001 fail-soft contract.
+    if (Array.isArray(toolInput.edits)) {
+      logger('approve', { filePath, reason: 'multi_edit_unsupported' });
+      process.stdout.write(JSON.stringify({ decision: 'approve' }));
+      return;
+    }
+
     // For Write: tool_input.content IS the new content.
-    // For Edit (H.7.20): read existing file from disk, apply the proposed
-    // edit, then check the result. Catches the case where Edit removes
-    // frontmatter from an existing skill.
+    // For Edit (H.7.20 baseline; H.9.19 upgrade): read existing file from disk,
+    // apply via applyEdit (handles replace_all + $-pattern sanitization), then
+    // check the result.
     let content = '';
     if (toolName === 'Write') {
       content = toolInput.content || '';
@@ -107,14 +135,7 @@ process.stdin.on('end', () => {
         process.stdout.write(JSON.stringify({ decision: 'approve' }));
         return;
       }
-      const oldString = toolInput.old_string || '';
-      const newString = toolInput.new_string || '';
-      // Apply the proposed edit. `replace` replaces first occurrence, which
-      // matches Edit's default semantics. For replace_all=true edits, multiple
-      // occurrences may exist but the frontmatter `---\n` boundary is
-      // typically unique-or-tied-together — first-replace check is a sound
-      // proxy for structural integrity.
-      content = existing.replace(oldString, newString);
+      content = applyEdit(existing, toolInput);
     }
 
     if (hasFrontmatter(content)) {

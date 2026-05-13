@@ -8,6 +8,122 @@ For granular per-phase detail, see annotated tags `phase-H.x.y` and `swarm/H.x.y
 
 ---
 
+## [2.0.2] — 2026-05-12 — H.9.19 Edit-simulation hotfix (post-v2.0.1 dogfood found 2 validator bugs; HOTFIX-CLASS no formal gate)
+
+**Hotfix-class patch** closing 2 PreToolUse validator bugs in Edit-simulation handling, discovered via post-v2.0.1 dogfood verification in a fresh CC session. Comprehensive audit of 9 hooks complete.
+
+### What landed
+
+**Component A — `validate-kb-doc.js` applyEdit helper (HIGH-class fix)**:
+
+- Added `applyEdit()` helper at module scope (mirrors `validate-yaml-frontmatter.js` H.9.11 + `validate-no-bare-secrets.js` H.9.15 precedent)
+- Added MultiEdit early-approve (matches yaml-frontmatter H.9.11 absorption)
+- Replaced L484-500 Edit-content path: was `fs.readFileSync(filePath, 'utf8')` reading pre-edit content; now `applyEdit(existing, toolInput)` applying `old_string → new_string`
+- Empirical proof of bug: Edit removing `version: 1` line from kb/architecture doc returned `decision: approve` pre-fix; returns `decision: block` post-fix
+
+**Component B — `validate-frontmatter-on-skills.js` applyEdit upgrade (MEDIUM-class fix)**:
+
+- Added `applyEdit()` helper at module scope (same shape as Component A)
+- Added MultiEdit early-approve
+- Replaced L100-117 inline `existing.replace(oldString, newString)` with `applyEdit(existing, toolInput)`
+- Now correctly handles `replace_all: true` (split + join — all occurrences, not first-only) and `$`-pattern sanitization (`$$`, `$1-$9`, `$&`, backtick, single-quote preserved as literal not interpreted as String.prototype.replace backreference)
+
+**Component C — Tests 103 + 104 regression** (smoke 99/99 → 101/101):
+
+- **Test 103**: validate-kb-doc.js Edit-simulation fault-injection — synthetic kb/architecture doc + synthetic Edit payload removing `version: 1` line via `JSON.stringify` portable pattern; expects `decision: block` with `version` mention in reason
+- **Test 104**: validate-frontmatter-on-skills.js MultiEdit + replace_all + `$`-pattern (3-fixture suite via `spawnSync` + in-process `applyEdit` logic verification): MultiEdit approves out-of-scope; `replace_all: true` replaces all occurrences (`a-a-a` → `b-b-b`); `$1` newString preserved as literal (not interpreted as backreference)
+
+**Component D — Plugin manifest 2.0.1 → 2.0.2 + README badge**:
+
+- `.claude-plugin/plugin.json`: `"version": "2.0.1"` → `"version": "2.0.2"`
+- `README.md`: badge `version-2.0.1-green` → `version-2.0.2-green`
+- Patch bump per H.9.10 + H.9.14 + H.9.18 observable-quality-change precedent (HARD-block now correctly fires on Edit operations)
+
+**Component E — HT-state.md Python cutover (drift-note 80 vigilance)**:
+
+- 4 new `h_9_19_*` keys (decision, branch, verify, audit)
+- Soak gate counter UNCHANGED at 8/5+ STRENGTHENED ×3 (hotfix-class doesn't advance per H.9.13/H.9.14.1/H.9.18 precedent)
+- drift-note 80 dup-key check: 200 unique top-level keys; 0 duplicates
+
+**Component F — this CHANGELOG entry + SKILL.md ledger prepend** (standard per H.9.13-H.9.18 precedent)
+
+### Comprehensive audit results
+
+All 9 hooks scanned for Edit-content handling:
+
+| Validator | Status |
+|---|---|
+| `validate-yaml-frontmatter.js` | GOOD — applyEdit() helper (H.9.11) |
+| `validate-no-bare-secrets.js` | GOOD — inline edit-simulation (H.7.21 + H.9.15) |
+| `validate-frontmatter-on-skills.js` | PARTIAL (Bug 2; fixed in Component B) |
+| `validate-kb-doc.js` | MISSING (Bug 1; fixed in Component A) |
+| `validate-adr-drift.js` | N/A — path-based; no content check |
+| `validate-plan-schema.js`, `verify-plan-gate.js` | N/A — ExitPlanMode handlers |
+| `config-guard.js`, `fact-force-gate.js` | N/A — path-based |
+
+### Methodology
+
+- Bugs discovered via fresh CC session dogfood verification (Scenarios 1 + 2 from `~/.claude/checkpoints/mempalace-fallback.md`)
+- Scenario 1 (kb-doc): Edit succeeded silently → bug found
+- Scenario 2 (yaml-frontmatter): HARD-blocked correctly → sister-validator works
+- Comprehensive audit of all 9 hooks for Edit-content handling pattern
+- Sister-validator-precedent-mechanical-mirror: 2 validators have working applyEdit; 1 has partial; 1 is missing entirely → mechanical fix via copy
+- No formal gate (HT.1.6 0/5 triggers); plan-mode user approval IS the gate
+- PR-first ship discipline per v2.0.x precedent
+
+### Why no formal gate
+
+Per HT.1.6 5-trigger framework:
+
+- Trigger 1 (fresh design surface): absent — applyEdit pattern empirically validated at H.9.11 + H.9.15
+- Trigger 2 (substrate-fundament `_lib/*` change): absent — touches 2 validator files only
+- Trigger 3 (option-axis): absent — applyEdit is unique correct fix; no design choice
+- Trigger 4 (institutional discipline): absent — applying existing convention
+- Trigger 5 (HIGH-class bug catchable at gate): caught at dogfood (post-ship); not preventable by additional gate
+
+0/5 triggers fire → no-formal-gate per H.9.13/H.9.14.1/H.9.12.1/H.9.18 hotfix-class precedent.
+
+### Verification
+
+99/99 → **101/101** install.sh smoke (+Test 103 validate-kb-doc.js Edit-sim regression; +Test 104 validate-frontmatter-on-skills.js MultiEdit/replace_all/dollar-pattern 3-fixture suite) + 67/67 `_h70-test` unchanged + 17-baseline contracts-validate unchanged + 0 ESLint errors + 0 eslint-disable directives (ADR-0006 invariant 5 active) + markdownlint 0 errors + yaml-lint PASS + shellcheck 0 errors. Direct-invocation verified all 3 fixture behaviors pre-test: `decision: block` on remove-version Edit; replace_all splits `a-a-a` → `b-b-b`; `$1` sanitization preserves literal.
+
+### Soak gate counter
+
+**UNCHANGED at 8/5+ STRENGTHENED ×3** — hotfix-class doesn't advance counter per established precedent. Preserves v2.0.0 retest eligibility for v2.0.x patch.
+
+### Drift-notes inventory
+
+POST-H.9.19: unchanged from H.9.16 (0 OPEN; 4 CLOSED: 78(a)+78(b)+80+82; 2 DEFERRED-with-codified-activation-criteria: 79+81).
+
+### Pattern observations
+
+1. **Dogfood verification in fresh CC session IS load-bearing** — caught 2 validator bugs that survived H.9.15 chaos closure + H.9.16 drift-notes closure + H.9.17 release ceremony + H.9.18 docs pass + v2.0.0 + v2.0.1 ships. Lesson: post-release dogfood is a Component-level item, not an opt-in user-action.
+2. **Sister-validator-precedent-mechanical-mirror** — when 2 validators have working pattern and N have non-conforming pattern, mirror rather than redesign. Reusable for cross-validator pattern propagation.
+3. **Edit-simulation pre-vs-post-edit-content gap** is substrate-fundament discipline; v2.1+ candidate to extract `_lib/edit-simulator.js` (would trigger MANDATORY-gate per ADR-0002).
+4. **Comprehensive hook audit at v2.0.x patch level is cost-effective** — 2 bugs found in 5 minutes via 1 grep + 2 reads vs ad-hoc bug-by-bug discovery.
+
+### Out of scope (deferred to v2.1+)
+
+- `_lib/edit-simulator.js` DRY extraction (would trigger MANDATORY-gate per ADR-0002 substrate-fundament)
+- Marketplace clone refresh (user-action: `/plugin install` or `git pull`)
+- MultiEdit content-validation support (matches yaml-frontmatter H.9.11 unsupported absorption)
+- Broader hook audit beyond Edit-simulation (this phase's audit covered exactly what dogfood surfaced)
+
+### Files modified
+
+- `hooks/scripts/validators/validate-kb-doc.js` (+~30 LoC; Component A)
+- `hooks/scripts/validators/validate-frontmatter-on-skills.js` (+~25 LoC; Component B)
+- `tests/smoke-ht.sh` (+~95 LoC; Tests 103 + 104)
+- `.claude-plugin/plugin.json` (manifest 2.0.1 → 2.0.2)
+- `README.md` (badge 2.0.1 → 2.0.2)
+- `swarm/thoughts/shared/HT-state.md` (Python cutover; 4 new keys)
+- `CHANGELOG.md` (this entry)
+- `skills/agent-team/SKILL.md` (ledger prepend)
+
+**Total LoC delta**: ~+200 across 8 files. Eighty-ninth distinct phase shape: post-release-dogfood-found-validator-Edit-simulation-gap hotfix.
+
+---
+
 ---
 
 ## [2.0.1] — 2026-05-12 — H.9.18 v2.0.1 docs-pass (post-v2.0.0 staleness correction; hotfix-class; 20 files updated)

@@ -451,6 +451,26 @@ function buildForcingInstruction(filePath, discipline) {
   return lines.join('\n');
 }
 
+// H.9.19 v2.0.2 absorption: applyEdit helper mirrors validate-yaml-frontmatter.js
+// H.9.11 + validate-no-bare-secrets.js H.9.15 precedent. Previously this validator
+// read CURRENT file content for Edit operations (pre-edit; missed Edit-introduced
+// violations); now it applies old_string → new_string to simulate post-edit content.
+// Handles replace_all (split+join for literal newStr) + $-pattern sanitization
+// ($$, $1-9, $&, $`, $') to avoid String.prototype.replace backreference
+// interpretation. MultiEdit (tool_input.edits[]) approves out-of-scope per
+// yaml-frontmatter H.9.11 absorption (substrate-scope decision).
+function applyEdit(existing, toolInput) {
+  const oldStr = toolInput.old_string || '';
+  const newStr = toolInput.new_string || '';
+  if (toolInput.replace_all === true) {
+    // split+join replaces ALL occurrences with LITERAL newStr (no $-pattern interpretation)
+    return existing.split(oldStr).join(newStr);
+  }
+  // First-occurrence semantics. Sanitize $-patterns: `$$` is escape for literal `$`.
+  const safeNewStr = newStr.replace(/\$/g, '$$$$');
+  return existing.replace(oldStr, safeNewStr);
+}
+
 let input = '';
 process.stdin.setEncoding('utf8');
 process.stdin.on('data', (chunk) => { input += chunk; });
@@ -481,20 +501,35 @@ process.stdin.on('end', () => {
       return;
     }
 
-    // Determine the proposed final content. For Write, the new content is
-    // tool_input.content. For Edit, we need to apply the edit to the current
-    // file and inspect the result. Since we don't have a clean way to do
-    // that without reproducing Edit's logic, we do the simpler thing: for
-    // Write, check tool_input.content. For Edit, check the CURRENT file
-    // content (post-edit verification is approximated by checking the
-    // existing structure; the next save's check will catch any regression).
+    // H.9.19 absorption: MultiEdit unsupported (matches yaml-frontmatter H.9.11).
+    // Approving rather than silently mis-processing edits[] array shape preserves
+    // ADR-0001 fail-soft contract.
+    if (Array.isArray(toolInput.edits)) {
+      logger('approve', { filePath, reason: 'multi_edit_unsupported' });
+      process.stdout.write(JSON.stringify({ decision: 'approve' }));
+      return;
+    }
+
+    // H.9.19 v2.0.2 fix: determine the proposed final content via applyEdit
+    // for Edit operations (was reading CURRENT file content — missed any
+    // Edit-introduced violations like removing the version: 1 line). For
+    // Write, tool_input.content IS the post-write content.
     let contentToCheck = '';
     if (toolName === 'Write' && typeof toolInput.content === 'string') {
       contentToCheck = toolInput.content;
-    } else if (fs.existsSync(filePath)) {
-      contentToCheck = fs.readFileSync(filePath, 'utf8');
+    } else if (toolName === 'Edit') {
+      let existing = '';
+      try {
+        existing = fs.readFileSync(filePath, 'utf8');
+      } catch {
+        // File doesn't exist — Edit will fail at tool layer, not our concern
+        logger('approve', { filePath, reason: 'file_missing_edit_will_fail' });
+        process.stdout.write(JSON.stringify({ decision: 'approve' }));
+        return;
+      }
+      contentToCheck = applyEdit(existing, toolInput);
     } else {
-      // New Edit on a non-existent file (uncommon) — skip check
+      // Defensive: unrecognized shape — fail-soft approve
       process.stdout.write(JSON.stringify({ decision: 'approve' }));
       return;
     }
